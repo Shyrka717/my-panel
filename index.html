@@ -6,7 +6,7 @@
     <title>Мир Технологий</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        :root { --bg:#0f0f13; --card:#1c1c24; --primary:#7c5cff; --text:#fff; --sec:#8b8b9e; --ok:#00e676; }
+        :root { --bg:#0f0f13; --card:#1c1c24; --primary:#7c5cff; --text:#fff; --sec:#8b8b9e; --ok:#00e676; --err:#ff5252; }
         *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
         body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden;user-select:none}
         .content{flex:1;overflow-y:auto;padding:20px;padding-bottom:100px;opacity:0;animation:fadeIn .5s forwards}
@@ -16,12 +16,16 @@
         .card{background:var(--card);border-radius:20px;padding:20px;margin-bottom:16px;box-shadow:0 10px 30px rgba(0,0,0,.2);border:1px solid rgba(255,255,255,.03);position:relative;overflow:hidden}
         .card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.1),transparent)}
         .header{font-size:13px;color:var(--sec);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:15px;font-weight:700}
-        .status-row{display:flex;align-items:center;justify-content:space-between}
-        .dot{width:8px;height:8px;background:var(--ok);border-radius:50%;box-shadow:0 0 12px var(--ok);animation:pulse 2s infinite;margin-right:10px}
-        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+        .status-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+        .status-row:last-child{margin-bottom:0}
+        .dot{width:8px;height:8px;border-radius:50%;margin-right:10px;transition:all .3s}
+        .dot.ok{background:var(--ok);box-shadow:0 0 12px var(--ok)}
+        .dot.err{background:var(--err);box-shadow:0 0 12px var(--err)}
         .btn-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
         .btn{background:rgba(255,255,255,.05);color:var(--text);border:1px solid rgba(255,255,255,.05);padding:16px;border-radius:14px;font-size:15px;font-weight:600;cursor:pointer;transition:.2s;display:flex;align-items:center;justify-content:center;gap:8px}
         .btn.pri{background:var(--primary);border:none;box-shadow:0 4px 15px rgba(124,92,255,.3)}
+        .btn.stop{background:rgba(255,82,82,.15);color:var(--err);border-color:rgba(255,82,82,.3)}
+        .btn.start{background:rgba(0,230,118,.15);color:var(--ok);border-color:rgba(0,230,118,.3)}
         .btn:active{transform:scale(.96);opacity:.9}
         .news-item{background:rgba(255,255,255,.02);border-radius:16px;padding:16px;margin-bottom:12px;border-left:3px solid var(--primary)}
         .tag{background:rgba(124,92,255,.15);color:#9d8aff;padding:4px 8px;border-radius:6px;font-size:10px;font-weight:700;display:inline-block;margin-bottom:8px}
@@ -32,12 +36,13 @@
         .tab{display:flex;flex-direction:column;align-items:center;color:#555;font-size:10px;gap:6px;transition:.2s;width:60px}
         .tab svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:2;transition:.2s}
         .tab.active{color:var(--primary)}.tab.active svg{transform:translateY(-2px);filter:drop-shadow(0 0 8px rgba(124,92,255,.5))}
+        .ping-val{font-family:monospace;color:var(--ok);font-weight:600}
     </style>
 </head>
 <body>
 <div class="content">
     <div id="s-home" class="screen active">
-        <div class="card"><div class="header">СОСТОЯНИЕ СИСТЕМЫ</div><div class="status-row"><div style="display:flex;align-items:center"><div class="dot"></div>Сервер активен</div><span style="color:var(--ok);font-weight:600">Online</span></div><div style="margin-top:12px;font-size:13px;color:var(--sec)">Uptime: <span id="up" style="color:#fff;font-family:monospace">00:00:00</span></div></div>
+        <div class="card"><div class="header">СОСТОЯНИЕ СИСТЕМЫ</div><div class="status-row"><div style="display:flex;align-items:center"><div class="dot ok"></div>Сервер активен</div><span style="color:var(--ok);font-weight:600">Online</span></div><div style="margin-top:12px;font-size:13px;color:var(--sec)">Uptime: <span id="up" style="color:#fff;font-family:monospace">00:00:00</span></div></div>
         <div class="card"><div class="header">⚡ БЫСТРЫЙ ДОСТУП</div><div class="btn-grid"><button class="btn pri" onclick="go('trade')">💱 Курс</button><button class="btn" onclick="go('news')">📰 Новости</button></div></div>
     </div>
     <div id="s-news" class="screen">
@@ -54,8 +59,21 @@
         </div>
     </div>
     <div id="s-set" class="screen">
-        <div class="card"><div class="header">👤 ПРОФИЛЬ</div><div class="status-row" style="margin-bottom:15px"><span style="color:var(--sec)">Пользователь</span><b>Сергей Ж.</b></div><div class="status-row"><span style="color:var(--sec)">ID сессии</span><b style="font-family:monospace;color:var(--primary)">#8X92A</b></div></div>
-        <div class="card"><div class="header">️ УПРАВЛЕНИЕ</div><button class="btn" style="width:100%;margin-bottom:10px;justify-content:flex-start" onclick="vib()"><span style="margin-right:10px">🔄</span> Перезагрузить воркер</button></div>
+        <div class="card">
+            <div class="header"> ПРОФИЛЬ</div>
+            <div class="status-row"><span style="color:var(--sec)">Пользователь</span><b>Сергей Ж.</b></div>
+            <div class="status-row"><span style="color:var(--sec)">ID сессии</span><b style="font-family:monospace;color:var(--primary)">#8X92A</b></div>
+        </div>
+        <div class="card">
+            <div class="header">⚙️ УПРАВЛЕНИЕ ВОРКЕРОМ</div>
+            <div class="status-row"><span style="color:var(--sec)">Статус</span><div style="display:flex;align-items:center;gap:8px"><div id="worker-dot" class="dot ok"></div><b id="worker-status" style="color:var(--ok)">Активен</b></div></div>
+            <div class="status-row"><span style="color:var(--sec)">Время запуска</span><b id="worker-time" style="font-family:monospace">--:--:--</b></div>
+            <div class="status-row"><span style="color:var(--sec)">Пинг до API</span><span id="ping-val" class="ping-val">-- ms</span></div>
+            <div class="btn-grid" style="margin-top:15px">
+                <button class="btn start" onclick="controlWorker('start')">▶️ Старт</button>
+                <button class="btn stop" onclick="controlWorker('stop')"> Стоп</button>
+            </div>
+        </div>
     </div>
 </div>
 <div class="tabbar">
@@ -67,8 +85,48 @@
 <script>
 const tg=window.Telegram.WebApp;tg.ready();tg.expand();tg.setHeaderColor('#0f0f13');tg.setBackgroundColor('#0f0f13');
 function vib(){if(tg.HapticFeedback)tg.HapticFeedback.impactOccurred('medium')}
-function go(t){vib();document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));document.getElementById('s-'+t).classList.add('active');const tabs=document.querySelectorAll('.tab');if(t==='home')tabs[0].classList.add('active');if(t==='news')tabs[1].classList.add('active');if(t==='trade'){tabs[2].classList.add('active');getRate()}if(t==='set')tabs[3].classList.add('active')}
-async function getRate(){const d=document.getElementById('rv'),c=document.getElementById('rc'),b=document.getElementById('bt'),l=document.getElementById('bl');d.style.opacity='.5';b.style.display='none';l.style.display='inline-block';try{const r=await fetch('https://open.er-api.com/v6/latest/RUB'),j=await r.json();d.innerText=j.rates.KZT.toFixed(4);c.innerHTML='▲ Актуально '+new Date().toLocaleTimeString();c.style.color='var(--ok)';if(tg.HapticFeedback)tg.HapticFeedback.notificationOccurred('success')}catch(e){c.innerText='Ошибка сети';c.style.color='#ff5252'}finally{d.style.opacity='1';b.style.display='inline';l.style.display='none'}}
+function go(t){vib();document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));document.getElementById('s-'+t).classList.add('active');const tabs=document.querySelectorAll('.tab');if(t==='home')tabs[0].classList.add('active');if(t==='news')tabs[1].classList.add('active');if(t==='trade'){tabs[2].classList.add('active');getRate()}if(t==='set'){tabs[3].classList.add('active');checkPing()}}
+function controlWorker(action){
+    vib();
+    tg.sendData(JSON.stringify({action: action, type: 'worker_control'}));
+    const dot = document.getElementById('worker-dot');
+    const status = document.getElementById('worker-status');
+    if(action === 'stop'){
+        dot.className = 'dot err'; status.innerText = 'Остановлен'; status.style.color = 'var(--err)';
+    } else {
+        dot.className = 'dot ok'; status.innerText = 'Активен'; status.style.color = 'var(--ok)';
+        document.getElementById('worker-time').innerText = new Date().toLocaleTimeString();
+    }
+}
+async function checkPing(){
+    const pingEl = document.getElementById('ping-val');
+    pingEl.innerText = 'измерение...';
+    const start = performance.now();
+    try {
+        await fetch('https://open.er-api.com/v6/latest/RUB', {method: 'HEAD'});
+        const end = performance.now();
+        const ping = Math.round(end - start);
+        pingEl.innerText = ping + ' ms';
+        pingEl.style.color = ping < 300 ? 'var(--ok)' : '#ffab40';
+    } catch(e) {
+        pingEl.innerText = 'Ошибка'; pingEl.style.color = 'var(--err)';
+    }
+}
+async function getRate(){
+    const d=document.getElementById('rv'),c=document.getElementById('rc'),b=document.getElementById('bt'),l=document.getElementById('bl');
+    d.style.opacity='.5';b.style.display='none';l.style.display='inline-block';
+    try{
+        const r=await fetch('https://open.er-api.com/v6/latest/RUB'),j=await r.json();
+        d.innerText=j.rates.KZT.toFixed(4);
+        c.innerHTML='▲ Актуально '+new Date().toLocaleTimeString();
+        c.style.color='var(--ok)';
+        if(tg.HapticFeedback)tg.HapticFeedback.notificationOccurred('success')
+    }catch(e){
+        c.innerText='Ошибка сети';c.style.color='#ff5252'
+    }finally{
+        d.style.opacity='1';b.style.display='inline';l.style.display='none'
+    }
+}
 let s=0;setInterval(()=>{s++;const h=String(Math.floor(s/3600)).padStart(2,'0'),m=String(Math.floor((s%3600)/60)).padStart(2,'0'),sc=String(s%60).padStart(2,'0');document.getElementById('up').innerText=h+':'+m+':'+sc},1000);
 getRate();
 </script>
