@@ -19,19 +19,11 @@
         .dot{width:8px;height:8px;border-radius:50%;margin-right:10px;transition:all .3s}
         .dot.ok{background:var(--ok);box-shadow:0 0 12px var(--ok)}
         .dot.err{background:var(--err);box-shadow:0 0 12px var(--err)}
-        
-        /* Стили кнопок */
         .btn-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-        .btn{background:rgba(255,255,255,.05);color:var(--text);border:1px solid rgba(255,255,255,.05);padding:16px;border-radius:14px;font-size:15px;font-weight:600;cursor:pointer;transition:.2s;display:flex;align-items:center;justify-content:center;gap:8px; opacity: 0.4; pointer-events: none;} /* По умолчанию неактивны */
-        
-        /* Активная кнопка СТАРТ */
+        .btn{background:rgba(255,255,255,.05);color:var(--text);border:1px solid rgba(255,255,255,.05);padding:16px;border-radius:14px;font-size:15px;font-weight:600;cursor:pointer;transition:.2s;display:flex;align-items:center;justify-content:center;gap:8px; opacity: 0.4; pointer-events: none;}
+        .btn.pri{background:var(--primary);border:none;box-shadow:0 4px 15px rgba(124,92,255,.3); opacity: 1; pointer-events: auto;}
         .btn.start.enabled { opacity: 1; background: rgba(0,230,118,0.2); color: var(--ok); border-color: var(--ok); box-shadow: 0 0 15px rgba(0,230,118,0.2); pointer-events: auto; }
-        .btn.start.enabled:active { transform: scale(0.96); background: rgba(0,230,118,0.4); }
-        
-        /* Активная кнопка СТОП */
         .btn.stop.enabled { opacity: 1; background: rgba(255,82,82,0.2); color: var(--err); border-color: var(--err); box-shadow: 0 0 15px rgba(255,82,82,0.2); pointer-events: auto; }
-        .btn.stop.enabled:active { transform: scale(0.96); background: rgba(255,82,82,0.4); }
-
         .news-item{background:rgba(255,255,255,.02);border-radius:16px;padding:16px;margin-bottom:12px;border-left:3px solid var(--primary)}
         .tag{background:rgba(124,92,255,.15);color:#9d8aff;padding:4px 8px;border-radius:6px;font-size:10px;font-weight:700;display:inline-block;margin-bottom:8px}
         .rate-val{font-size:42px;font-weight:800;text-align:center;margin:20px 0;background:linear-gradient(135deg,#fff,#aaa);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
@@ -50,7 +42,7 @@
 <div class="content">
     <div id="s-home" class="screen active">
         <div class="card"><div class="header">СОСТОЯНИЕ СИСТЕМЫ</div><div class="status-row"><div style="display:flex;align-items:center"><div class="dot ok"></div>Сервер активен</div><span style="color:var(--ok);font-weight:600">Online</span></div><div style="margin-top:12px;font-size:13px;color:var(--sec)">Uptime панели: <span id="up" style="color:#fff;font-family:monospace">00:00:00</span></div></div>
-        <div class="card"><div class="header">⚡ БЫСТРЫЙ ДОСТУП</div><div class="btn-grid"><button class="btn pri enabled" onclick="go('trade')"> Курс</button><button class="btn enabled" onclick="go('news')">📰 Новости</button></div></div>
+        <div class="card"><div class="header"> БЫСТРЫЙ ДОСТУП</div><div class="btn-grid"><button class="btn pri" onclick="go('trade')"> Курс</button><button class="btn pri" onclick="go('news')">📰 Новости</button></div></div>
     </div>
     <div id="s-news" class="screen">
         <div class="header" style="padding:0 0 15px 5px"> ЛЕНТА СОБЫТИЙ</div>
@@ -62,7 +54,7 @@
             <div class="header" style="justify-content:center">RUB / KZT</div>
             <div class="rate-val" id="rv">--.--</div>
             <div id="rc" style="color:var(--ok);font-size:14px;font-weight:600;margin-bottom:20px">Загрузка...</div>
-            <button class="btn pri enabled" style="width:100%" onclick="getRate()"><span id="bt">Обновить курс</span><div id="bl" class="loader" style="display:none"></div></button>
+            <button class="btn pri" style="width:100%" onclick="getRate()"><span id="bt">Обновить курс</span><div id="bl" class="loader" style="display:none"></div></button>
         </div>
     </div>
     <div id="s-set" class="screen">
@@ -77,12 +69,9 @@
             <div class="status-row"><span style="color:var(--sec)">Последний запуск</span><b id="worker-start-time" style="font-family:monospace; font-size: 12px;">--:--:--</b></div>
             <div class="status-row"><span style="color:var(--sec)">Время работы</span><b id="worker-uptime" style="font-family:monospace; color: var(--primary);">00:00:00</b></div>
             <div class="status-row"><span style="color:var(--sec)">Пинг до API</span><span id="ping-val" class="ping-val">-- ms</span></div>
-            
-            <!-- Кнопки управления -->
             <div class="btn-grid" style="margin-top:15px">
-                <!-- Start по умолчанию активен (enabled), Stop неактивен -->
                 <button id="btn-start" class="btn start enabled" onclick="controlWorker('start')">▶️ Старт</button>
-                <button id="btn-stop" class="btn stop" onclick="controlWorker('stop')">⏹ Стоп</button>
+                <button id="btn-stop" class="btn stop" onclick="controlWorker('stop')"> Стоп</button>
             </div>
         </div>
     </div>
@@ -100,37 +89,21 @@ let workerStartTime = null; let workerTimerInterval = null;
 function vib(){if(tg.HapticFeedback)tg.HapticFeedback.impactOccurred('medium')}
 function showToast(message) { const x = document.getElementById("toast"); x.innerText = message; x.className = "show"; setTimeout(function(){ x.className = x.className.replace("show", ""); }, 3000); }
 function go(t){ vib(); document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active')); document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active')); document.getElementById('s-'+t).classList.add('active'); const tabs=document.querySelectorAll('.tab'); if(t==='home')tabs[0].classList.add('active'); if(t==='news')tabs[1].classList.add('active'); if(t==='trade'){tabs[2].classList.add('active');getRate()} if(t==='set'){tabs[3].classList.add('active');checkPing()} }
-
-// Логика переключения кнопок
 function controlWorker(action){
     const btnStart = document.getElementById('btn-start'); 
     const btnStop = document.getElementById('btn-stop');
-    
-    // Проверка: если нажали неактивную кнопку, ничего не делаем
-    if (action === 'start' && !btnStart.classList.contains('enabled')) return;
-    if (action === 'stop' && !btnStop.classList.contains('enabled')) return;
-
     vib(); 
     tg.sendData(JSON.stringify({action: action, type: 'worker_control'}));
-    
     const dot = document.getElementById('worker-dot'); 
     const status = document.getElementById('worker-status');
     const timeDisplay = document.getElementById('worker-start-time');
-
     if(action === 'stop'){
-        // Включаем Старт, выключаем Стоп
-        btnStart.classList.add('enabled');
-        btnStop.classList.remove('enabled');
-        
+        btnStart.classList.add('enabled'); btnStop.classList.remove('enabled');
         dot.className = 'dot err'; status.innerText = 'Остановлен'; status.style.color = 'var(--err)';
         clearInterval(workerTimerInterval); document.getElementById('worker-uptime').innerText = "00:00:00"; workerStartTime = null; 
         showToast("⏹ Логика остановлена");
-        
     } else if (action === 'start') {
-        // Включаем Стоп, выключаем Старт
-        btnStop.classList.add('enabled');
-        btnStart.classList.remove('enabled');
-        
+        btnStop.classList.add('enabled'); btnStart.classList.remove('enabled');
         dot.className = 'dot ok'; status.innerText = 'Активен'; status.style.color = 'var(--ok)';
         workerStartTime = Date.now(); const now = new Date(); timeDisplay.innerText = now.toLocaleTimeString();
         if(workerTimerInterval) clearInterval(workerTimerInterval);
@@ -138,7 +111,6 @@ function controlWorker(action){
         showToast("✅ Логика запущена");
     }
 }
-
 async function checkPing(){ const pingEl = document.getElementById('ping-val'); pingEl.innerText = 'измерение...'; const start = performance.now(); try { await fetch('https://open.er-api.com/v6/latest/RUB', {method: 'HEAD'}); const end = performance.now(); const ping = Math.round(end - start); pingEl.innerText = ping + ' ms'; pingEl.style.color = ping < 300 ? 'var(--ok)' : '#ffab40'; } catch(e) { pingEl.innerText = 'Ошибка'; pingEl.style.color = 'var(--err)'; } }
 async function getRate(){ const d=document.getElementById('rv'),c=document.getElementById('rc'),b=document.getElementById('bt'),l=document.getElementById('bl'); d.style.opacity='.5';b.style.display='none';l.style.display='inline-block'; try{ const r=await fetch('https://open.er-api.com/v6/latest/RUB'),j=await r.json(); d.innerText=j.rates.KZT.toFixed(4); c.innerHTML='▲ Актуально '+new Date().toLocaleTimeString(); c.style.color='var(--ok)'; if(tg.HapticFeedback)tg.HapticFeedback.notificationOccurred('success') }catch(e){ c.innerText='Ошибка сети';c.style.color='#ff5252' }finally{ d.style.opacity='1';b.style.display='inline';l.style.display='none' } }
 let s=0;setInterval(()=>{s++;const h=String(Math.floor(s/3600)).padStart(2,'0'),m=String(Math.floor((s%3600)/60)).padStart(2,'0'),sc=String(s%60).padStart(2,'0');document.getElementById('up').innerText=h+':'+m+':'+sc},1000);
