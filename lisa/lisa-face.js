@@ -181,7 +181,7 @@ function buildRig(F) {
     W, H, N, M, X: Float32Array.from(X), Y: Float32Array.from(Y), Z: Float32Array.from(Z), uv,
     idx: new Uint16Array(tris), mouthIdx: new Uint16Array(mouthTris), cavLoop, cavUV, cavIdx: new Uint16Array(cavIdx),
     mouthC, midUp: mid(li.up), midLo: mid(li.lo), restOpen: 0,
-    mcx, mw, ym, jawAmp: .5 * mw, nose: [X[F.nose], Y[F.nose]],
+    mcx, mw, ym, jawAmp: .5 * mw, nose: [X[F.nose], Y[F.nose]], breath: [chinY + 35, chinY + 190],
     wJ, wUp, wSq, wCa, wCb, wChkA, wChkB, eyeId, eyeUpW, eyeLoW, eyeIrisW, eyeCl, gazeW, wBA, wBB, wFA, wFB, w3, isRing,
     loopIdx: LI, faceTriCount: tris.length
   };
@@ -440,7 +440,7 @@ function start(canvas, opts, F, img) {
     P[r.mouthC * 2] = cx / r.loopIdx.length; P[r.mouthC * 2 + 1] = cyy / r.loopIdx.length;
     r.cavLoop.forEach((i, n) => { cavPos[n * 2] = P[i * 2]; cavPos[n * 2 + 1] = P[i * 2 + 1]; });
     for (let n = 0; n < gridPos.length; n += 2) {
-      gridPos[n] = gridRest[n]; gridPos[n + 1] = gridRest[n + 1] - s.breath * 1.3 * smooth(300, 460, gridRest[n + 1]);
+      gridPos[n] = gridRest[n]; gridPos[n + 1] = gridRest[n + 1] - s.breath * 1.3 * smooth(r.breath[0], r.breath[1], gridRest[n + 1]);
     }
   }
 

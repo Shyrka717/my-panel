@@ -12,7 +12,7 @@ cd my-panel && python3 -m http.server 8000
 # http://localhost:8000/lisa/
 ```
 
-Файлы: `lisa-face.js` (движок), `face-data.js` (разметка лица), `../assets/lisa.webp` (портрет), `index.html` (демо).
+Файлы: `lisa-face.js` (движок), `face-data.js` (разметка лица), `portrait.webp` (портрет), `index.html` (демо).
 
 ## Подключение
 
@@ -21,7 +21,7 @@ cd my-panel && python3 -m http.server 8000
 <script src="face-data.js"></script>
 <script src="lisa-face.js"></script>
 <script>
-LisaFace.create(document.getElementById('face'), { image: '../assets/lisa.webp' }).then(lisa => {
+LisaFace.create(document.getElementById('face'), { image: 'portrait.webp' }).then(lisa => {
   lisa.setState('listening');            // слушает
   lisa.setState('thinking');             // думает
   lisa.setState('idle');
@@ -30,7 +30,7 @@ LisaFace.create(document.getElementById('face'), { image: '../assets/lisa.webp' 
 </script>
 ```
 
-Размер холста задаёт CSS, пропорции портрета 490×688.
+Размер холста задаёт CSS, пропорции портрета 586×780.
 
 ## API
 
@@ -56,7 +56,7 @@ LisaFace.create(document.getElementById('face'), { image: '../assets/lisa.webp' 
 ```
 pip install mediapipe numpy pillow
 curl -o face_landmarker.task https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
-python3 lisa/tools/make-face-data.py portrait.webp face_landmarker.task lisa/face-data.js
+python3 lisa/tools/make-face-data.py lisa/portrait.webp face_landmarker.task lisa/face-data.js
 ```
 
 Чем выше разрешение портрета, тем чётче лицо на больших экранах: движок от разрешения не зависит.

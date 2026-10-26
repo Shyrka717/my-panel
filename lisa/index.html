@@ -15,7 +15,7 @@ main{max-width:440px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
 
 /* голограмма */
 .holo-card{padding:0;overflow:hidden;position:relative;border-color:rgba(74,168,255,.28);box-shadow:0 0 40px rgba(40,110,255,.25),0 10px 30px rgba(0,0,0,.3)}
-.holo{position:relative;aspect-ratio:490/688;background:var(--bg);overflow:hidden}
+.holo{position:relative;aspect-ratio:586/780;background:var(--bg);overflow:hidden}
 .holo-face{position:absolute;inset:0;filter:saturate(1.1) contrast(1.04);animation:pulse 3.5s ease-in-out infinite}
 .holo-face>*{position:absolute;inset:0;width:100%;height:100%;display:block}
 .holo-fx{position:absolute;inset:0;pointer-events:none;animation:flicker 5s infinite}
@@ -23,7 +23,7 @@ main{max-width:440px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
 .scan{position:absolute;inset:0;overflow:hidden;mix-blend-mode:screen;background:repeating-linear-gradient(0deg,rgba(120,180,255,.06) 0 1px,transparent 1px 3px)}
 .scan::after{content:'';position:absolute;left:0;right:0;top:-25%;height:22%;background:linear-gradient(180deg,transparent,rgba(110,190,255,.2),transparent);animation:sweep 4.5s linear infinite}
 .rings{position:absolute;left:0;right:0;bottom:2.5%;height:8%}
-.rings i{position:absolute;left:59.6%;top:50%;width:62%;aspect-ratio:6/1;border:1.5px solid rgba(130,205,255,.85);border-radius:50%;box-shadow:0 0 14px rgba(80,170,255,.7),inset 0 0 14px rgba(80,170,255,.35);transform:translate(-50%,-50%) scale(.3);opacity:0;animation:ring 3.2s ease-out infinite}
+.rings i{position:absolute;left:50%;top:50%;width:52%;aspect-ratio:6/1;border:1.5px solid rgba(130,205,255,.85);border-radius:50%;box-shadow:0 0 14px rgba(80,170,255,.7),inset 0 0 14px rgba(80,170,255,.35);transform:translate(-50%,-50%) scale(.3);opacity:0;animation:ring 3.2s ease-out infinite}
 .rings i:nth-child(2){animation-delay:1.07s}.rings i:nth-child(3){animation-delay:2.14s}
 .tag{position:absolute;top:14px;left:14px;z-index:3;display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:rgba(10,20,45,.55);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid var(--line);font-size:11px;font-weight:700;letter-spacing:1.2px;color:var(--soft)}
 .tag b{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent);animation:blink 1.6s ease-in-out infinite}
@@ -62,7 +62,7 @@ input[type=file]{display:none}
     <div class="holo">
       <div class="tag"><b></b>LISA · <span id="state">ONLINE</span></div>
       <div class="holo-face">
-        <img id="fallback" src="../assets/lisa.webp" alt="LISA" draggable="false" style="object-fit:cover">
+        <img id="fallback" src="portrait.webp" alt="LISA" draggable="false" style="object-fit:cover">
         <canvas id="face" role="img" aria-label="Лицо ассистента LISA"></canvas>
       </div>
       <div class="holo-fx">
@@ -154,7 +154,7 @@ input[type=file]{display:none}
     sub.append(d,document.createTextNode(t.slice(done)));sub.classList.add('on');
   }
 
-  LisaFace.create(face,{image:'../assets/lisa.webp'}).then(l=>{
+  LisaFace.create(face,{image:'portrait.webp'}).then(l=>{
     lisa=l;window.lisa=l;fallback.style.display='none';
     l.on('text',e=>showSub(e.text,e.done));
     l.on('speakstart',()=>{stateTag.textContent='SPEAKING'});

@@ -75,8 +75,12 @@ def inside(pt, t):
 use = collections.defaultdict(list)
 for k, t in enumerate(tris):
     for i in range(3): use[tuple(sorted((t[i], t[(i + 1) % 3])))].append(k)
-drop = set()
-for e, v in use.items():
+over = {e for e, v in use.items() if len(v) > 2}
+edges_of = lambda t: [tuple(sorted((t[i], t[(i + 1) % 3]))) for i in range(3)]
+# лишняя клика: все три её ребра заняты больше чем двумя треугольниками
+drop = {k for k, t in enumerate(tris) if all(e in over for e in edges_of(t))}
+for e in over:
+    v = [k for k in use[e] if k not in drop]
     if len(v) > 2:
         for k in v:
             if all(inside(P[list(tris[j]), :2].mean(0), tris[k]) for j in v if j != k): drop.add(k)
