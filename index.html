@@ -79,6 +79,7 @@
         /* ГОЛОГРАММА */
         .holo-card{padding:0;border-color:rgba(74,168,255,.28);box-shadow:0 0 40px rgba(40,110,255,.25),0 10px 30px rgba(0,0,0,.3)}
         .holo{position:relative;aspect-ratio:490/688;perspective:900px;background:#050a1a;cursor:pointer;touch-action:pan-y}
+        .holo:focus-visible{outline:2px solid #4aa8ff;outline-offset:-3px}
         .holo-stage{position:absolute;inset:0;transform-style:preserve-3d;transition:transform .15s ease-out;animation:holoFlicker 5s infinite}
         .holo-img,.holo-ghost{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none}
         .holo-img{filter:saturate(1.15) contrast(1.05);animation:holoPulse 3.5s ease-in-out infinite}
@@ -107,7 +108,7 @@
 <body>
 <div class="content">
     <div id="s-home" class="screen active">
-        <div class="card holo-card"><div id="holo" class="holo" onclick="holoTap()">
+        <div class="card holo-card"><div id="holo" class="holo" role="button" tabindex="0" aria-label="LISA" onclick="holoTap()">
             <div class="holo-tag"><div class="dot"></div>LISA · ONLINE</div>
             <div class="holo-stage">
                 <img class="holo-img" src="assets/lisa.webp" alt="LISA" draggable="false">
@@ -249,8 +250,9 @@ getRate();
         requestAnimationFrame(tick);
     }
     if(!calm)tick();
-    box.addEventListener('pointermove',e=>{const r=box.getBoundingClientRect();st.style.transform=`rotateY(${((e.clientX-r.left)/r.width-.5)*10}deg) rotateX(${-((e.clientY-r.top)/r.height-.5)*8}deg)`});
+    box.addEventListener('pointermove',e=>{if(calm)return;const r=box.getBoundingClientRect();st.style.transform=`rotateY(${((e.clientX-r.left)/r.width-.5)*10}deg) rotateX(${-((e.clientY-r.top)/r.height-.5)*8}deg)`});
     ['pointerleave','pointerup','pointercancel'].forEach(n=>box.addEventListener(n,()=>{st.style.transform=''}));
+    box.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();holoTap()}});
     window.holoTap=function(){vib();box.classList.remove('glitch');void box.offsetWidth;box.classList.add('glitch');showToast('LISA на связи');setTimeout(()=>box.classList.remove('glitch'),600)};
 })();
 </script>
