@@ -318,6 +318,15 @@ function start(canvas, opts, F, img) {
     return el.play().then(() => true, () => { if (talk === mine) finish(); return false; });
   }
 
+  // уровень речи из приложения (0..1), например из нативного синтеза речи; вызывать 20-60 раз в секунду
+  function feed(v, o) {
+    const e = { lv: clamp(+v || 0, 0, 1), at: performance.now(), r: clamp(o && o.round || 0, 0, 1), s: clamp(o && o.stretch || 0, 0, 1) };
+    if (talk && talk.mode === 'text' && talk.silent) { talk.ext = e; return; }   // беззвучная фраза: субтитры по тексту, губы по громкости
+    if (!talk || talk.mode !== 'ext') { stop(); talk = { mode: 'ext', lv: 0, at: 0, r: 0, s: 0, text: '' }; emit('speakstart', { text: '' }); }
+    talk.lv = clamp(+v || 0, 0, 1); talk.at = performance.now();
+    talk.r = clamp(o && o.round || 0, 0, 1); talk.s = clamp(o && o.stretch || 0, 0, 1);
+  }
+
   // уровень микрофона (0..1) для «слушающего» лица
   function level(v) { micLevel = clamp(v, 0, 1); }
 
@@ -340,7 +349,12 @@ function start(canvas, opts, F, img) {
         if (ch === ' ' && talk.lastSpace !== i) { talk.lastSpace = i; if (Math.random() < .4) bump = Math.max(bump, .35 + Math.random() * .3); }
         if (ch === '!' || ch === '?') bump = Math.max(bump, ch === '!' ? .8 : .55);
         if (i !== talk.shown) { talk.shown = i; text(tx, i); }
-      } else { talk.pos += dt * talk.cps; if (talk.silent && talk.pos >= tx.length + 3) finish(); }
+      } else talk.pos += dt * talk.cps;
+      const ex = talk.ext && now - talk.ext.at < 400 ? talk.ext : null;
+      if (ex) { jaw = ex.lv; round = ex.r * jaw; stretch = ex.s * jaw; }
+      else if (i >= tx.length && talk.silent && talk.pos >= tx.length + 3) finish();
+    } else if (talk.mode === 'ext') {
+      if (now - talk.at > 400) finish(); else { jaw = talk.lv; round = talk.r * jaw; stretch = talk.s * jaw; }
     } else {
       const a = talk.an; a.getByteTimeDomainData(talk.td); a.getByteFrequencyData(talk.fd);
       let r = 0; for (let i = 0; i < talk.td.length; i++) { const x = (talk.td[i] - 128) / 128; r += x * x; }
@@ -494,7 +508,7 @@ function start(canvas, opts, F, img) {
   canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); alive = false; emit('contextlost'); });
 
   return {
-    canvas, say, speakAudio, stop, level,
+    canvas, say, speakAudio, feed, stop, level,
     setMood, setState, react: () => { react = 1; nextBlink = 0; },
     pose: o => { ov = o || null; },
     get speaking() { return !!talk; }, get mood() { return mood; }, get state() { return state; },
