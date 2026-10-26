@@ -82,7 +82,8 @@
         .holo:focus-visible{outline:2px solid #4aa8ff;outline-offset:-3px}
         .holo-stage{position:absolute;inset:0;transform-style:preserve-3d;transition:transform .15s ease-out;animation:holoFlicker 5s infinite}
         .holo-img,.holo-ghost{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none}
-        .holo-img{filter:saturate(1.15) contrast(1.05);animation:holoPulse 3.5s ease-in-out infinite}
+        .holo-face{position:absolute;inset:0;filter:saturate(1.15) contrast(1.05);animation:holoPulse 3.5s ease-in-out infinite}
+        #holo-gl{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:none}
         .holo-ghost{background:url(assets/lisa.webp) center/cover;mix-blend-mode:screen;opacity:0;animation:holoGlitch 7s steps(1) infinite}
         .holo-ghost.g1{filter:hue-rotate(-45deg) brightness(1.3)}
         .holo-ghost.g2{filter:hue-rotate(55deg) brightness(1.3);animation-delay:.08s}
@@ -95,6 +96,15 @@
         .holo-rings i:nth-child(2){animation-delay:1.07s}.holo-rings i:nth-child(3){animation-delay:2.14s}
         .holo-tag{position:absolute;top:14px;left:14px;z-index:3;display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:rgba(10,20,45,.55);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(110,180,255,.3);font-size:11px;font-weight:700;letter-spacing:1.2px;color:#9fd0ff}
         .holo-tag .dot{margin:0;background:#4aa8ff;box-shadow:0 0 12px #4aa8ff;animation:holoBlink 1.6s ease-in-out infinite}
+        .holo-sub{position:absolute;left:12px;right:12px;bottom:11%;z-index:3;padding:8px 12px;border-radius:12px;background:rgba(5,12,30,.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(110,180,255,.22);text-align:center;font-size:14px;line-height:1.35;font-weight:600;color:rgba(223,240,255,.5);pointer-events:none;opacity:0;transition:opacity .3s}
+        .holo-sub.on{opacity:1}.holo-sub .done{color:#fff;text-shadow:0 0 8px rgba(60,140,255,.9)}
+        .inp{width:100%;padding:14px 16px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);color:var(--text);font:inherit;font-size:16px;outline:none;user-select:text;-webkit-user-select:text;margin-bottom:12px;transition:.2s}
+        .inp:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(124,92,255,.18)}
+        .btn-soft{background:rgba(255,255,255,.05);color:var(--sec);border:1px solid rgba(255,255,255,.05)}.btn-soft:active{transform:scale(.96)}
+        .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+        .chip{padding:8px 14px;border-radius:999px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;background:rgba(255,255,255,.05);color:var(--sec);border:1px solid rgba(255,255,255,.06);outline:none;transition:.2s}
+        .chip.on{background:rgba(74,168,255,.15);color:#9fd0ff;border-color:rgba(74,168,255,.5)}
+        .chip:focus-visible,.btn:focus-visible{outline:2px solid #4aa8ff;outline-offset:2px}
         @keyframes holoFlicker{0%,46%,52%,100%{opacity:1}47%{opacity:.8}48%{opacity:1}49%{opacity:.9}50%{opacity:1}51%{opacity:.85}}
         @keyframes holoPulse{0%,100%{filter:saturate(1.15) contrast(1.05) brightness(1)}50%{filter:saturate(1.3) contrast(1.08) brightness(1.12)}}
         @keyframes holoGlitch{0%,92%,100%{opacity:0;transform:none;clip-path:inset(0)}93%{opacity:.75;transform:translateX(-6px);clip-path:inset(18% 0 62% 0)}94%{opacity:.75;transform:translateX(5px);clip-path:inset(54% 0 28% 0)}95%{opacity:.75;transform:translateX(-3px);clip-path:inset(76% 0 6% 0)}96%{opacity:0}}
@@ -109,15 +119,33 @@
 <div class="content">
     <div id="s-home" class="screen active">
         <div class="card holo-card"><div id="holo" class="holo" role="button" tabindex="0" aria-label="LISA" onclick="holoTap()">
-            <div class="holo-tag"><div class="dot"></div>LISA · ONLINE</div>
+            <div class="holo-tag"><div class="dot"></div>LISA · <span id="holo-state">ONLINE</span></div>
             <div class="holo-stage">
-                <img class="holo-img" src="assets/lisa.webp" alt="LISA" draggable="false">
+                <div class="holo-face">
+                    <img class="holo-img" src="assets/lisa.webp" alt="LISA" draggable="false">
+                    <canvas id="holo-gl"></canvas>
+                </div>
                 <i class="holo-ghost g1"></i><i class="holo-ghost g2"></i>
                 <canvas id="holo-fx"></canvas>
                 <div class="holo-scan"></div>
                 <div class="holo-rings"><i></i><i></i><i></i></div>
             </div>
-        </div></div>
+        </div>
+        <div id="holo-sub" class="holo-sub" aria-live="polite"></div></div>
+        <div class="card">
+            <div class="header">РАЗГОВОР С LISA</div>
+            <input id="say-text" class="inp" type="text" maxlength="400" aria-label="Что сказать LISA" placeholder="Что сказать LISA?" value="Привет! Я LISA. Рада тебя видеть." onkeydown="if(event.key==='Enter')sayFromInput()">
+            <div class="btn-grid">
+                <button class="btn btn-action" onclick="sayFromInput()">Сказать</button>
+                <button class="btn btn-soft" onclick="lisa.stop()">Стоп</button>
+            </div>
+            <div class="chips" role="group" aria-label="Настроение">
+                <button class="chip on" data-m="neutral" aria-pressed="true" onclick="lisa.mood('neutral')">Спокойно</button>
+                <button class="chip" data-m="happy" aria-pressed="false" onclick="lisa.mood('happy')">Радость</button>
+                <button class="chip" data-m="surprised" aria-pressed="false" onclick="lisa.mood('surprised')">Удивление</button>
+                <button class="chip" data-m="thinking" aria-pressed="false" onclick="lisa.mood('thinking')">Раздумье</button>
+            </div>
+        </div>
         <div class="card"><div class="header">СОСТОЯНИЕ СИСТЕМЫ</div><div class="status-row"><div style="display:flex;align-items:center"><div class="dot ok"></div>Сервер активен</div><span style="color:var(--ok);font-weight:600">Online</span></div><div style="margin-top:12px;font-size:13px;color:var(--sec)">Uptime панели: <span id="up" style="color:#fff;font-family:monospace">00:00:00</span></div></div>
         <div class="card"><div class="header">БЫСТРЫЙ ДОСТУП</div><div class="btn-grid">
             <!-- Используем класс btn-action для гарантированной активности -->
@@ -232,28 +260,215 @@ getRate();
 
 (function(){
     const box=document.getElementById('holo'),st=box.querySelector('.holo-stage'),cv=document.getElementById('holo-fx'),cx=cv.getContext('2d');
+    const img=box.querySelector('.holo-img'),cg=document.getElementById('holo-gl'),sub=document.getElementById('holo-sub'),tag=document.getElementById('holo-state');
     const calm=matchMedia('(prefers-reduced-motion:reduce)').matches;
+    const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
     let W=0,H=0,P=[];
+
+    // ЛИЦО: деформация фото в WebGL (координаты точек заданы в пикселях исходника 490x688)
+    const VS='attribute vec2 a;varying vec2 v;void main(){v=vec2(a.x*.5+.5,.5-a.y*.5);gl_Position=vec4(a,0.,1.);}';
+    const FS=`
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+uniform sampler2D uTex;uniform vec2 uRes;uniform vec2 uGaze;
+uniform float uBlink,uJaw,uRound,uSmile,uBrowL,uBrowR,uFurrow,uNod;
+varying vec2 v;
+float G(vec2 p,vec2 c,vec2 s){vec2 q=(p-c)/s;return exp(-.5*dot(q,q));}
+void main(){
+  vec2 p=v*uRes;vec2 d=vec2(0.);
+  d.y+=uNod*(1.-smoothstep(250.,300.,p.y));
+  d.y+=15.5*uBlink*(G(p,vec2(252.,143.),vec2(24.,9.))+G(p,vec2(340.,142.),vec2(24.,9.)));
+  d.y-=6.*uBrowL*G(p,vec2(248.,119.),vec2(24.,7.));
+  d.y-=6.*uBrowR*G(p,vec2(331.,120.),vec2(22.,7.));
+  d+=uFurrow*vec2(3.,3.)*G(p,vec2(266.,120.),vec2(10.,6.));
+  d+=uFurrow*vec2(-3.,3.)*G(p,vec2(316.,121.),vec2(10.,6.));
+  d+=uGaze*vec2(2.5,2.)*(G(p,vec2(256.,144.),vec2(7.,6.))+G(p,vec2(338.,143.),vec2(7.,6.)));
+  float below=smoothstep(226.5,229.,p.y)*(1.-smoothstep(250.,276.,p.y));
+  d.y+=13.*uJaw*below*G(p,vec2(292.,238.),vec2(34.,30.));
+  d.y-=2.*uJaw*(1.-smoothstep(222.,226.,p.y))*G(p,vec2(292.,220.),vec2(26.,6.));
+  float cl=G(p,vec2(266.,226.),vec2(9.,9.)),cr=G(p,vec2(319.,226.),vec2(9.,9.));
+  d.x+=uRound*6.*(cl-cr);
+  d+=uSmile*(vec2(-4.,-5.5)*cl+vec2(4.,-5.5)*cr);
+  d.y-=uSmile*2.*(G(p,vec2(250.,172.),vec2(16.,12.))+G(p,vec2(334.,172.),vec2(16.,12.)));
+  vec3 col=texture2D(uTex,(p-d)/uRes).rgb;
+  float o=uJaw;
+  vec2 c=vec2(292.,225.5+6.5*o);
+  vec2 q=(p-c)/vec2(mix(24.,15.,uRound)*smoothstep(0.,.35,o)+.001,6.5*o+1.2);
+  float m=(1.-smoothstep(.72,1.02,length(q)))*smoothstep(.04,.14,o);
+  col=mix(col,vec3(.03,.02,.11),m*.94);
+  float teeth=m*smoothstep(-1.,-.62,q.y)*(1.-smoothstep(-.62,-.2,q.y))*smoothstep(.3,.65,o)*(1.-uRound);
+  col=mix(col,vec3(.62,.74,.98),teeth*.5);
+  col=mix(col,vec3(.35,.18,.42),m*smoothstep(0.,.5,q.y)*smoothstep(.35,.8,o)*.35);
+  col*=1.-.4*uBlink*(G(p,vec2(252.,151.),vec2(19.,1.3))+G(p,vec2(340.,150.),vec2(19.,1.3)));
+  gl_FragColor=vec4(col,1.);
+}`;
+    let gl=null;const U={};
+    function initGL(){
+        try{
+            gl=cg.getContext('webgl',{alpha:false,antialias:false});
+            if(!gl)return;
+            const sh=(t,src)=>{const o=gl.createShader(t);gl.shaderSource(o,src);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw gl.getShaderInfoLog(o);return o};
+            const pr=gl.createProgram();gl.attachShader(pr,sh(gl.VERTEX_SHADER,VS));gl.attachShader(pr,sh(gl.FRAGMENT_SHADER,FS));gl.linkProgram(pr);
+            if(!gl.getProgramParameter(pr,gl.LINK_STATUS))throw gl.getProgramInfoLog(pr);
+            gl.useProgram(pr);
+            gl.bindBuffer(gl.ARRAY_BUFFER,gl.createBuffer());gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+            const a=gl.getAttribLocation(pr,'a');gl.enableVertexAttribArray(a);gl.vertexAttribPointer(a,2,gl.FLOAT,false,0,0);
+            gl.bindTexture(gl.TEXTURE_2D,gl.createTexture());
+            gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,img);
+            gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+            ['uRes','uGaze','uBlink','uJaw','uRound','uSmile','uBrowL','uBrowR','uFurrow','uNod'].forEach(n=>{U[n]=gl.getUniformLocation(pr,n)});
+            gl.uniform2f(U.uRes,img.naturalWidth,img.naturalHeight);
+            cg.addEventListener('webglcontextlost',e=>{e.preventDefault();gl=null;cg.style.display='none'});
+            cg.width=Math.max(1,cg.width);gl.viewport(0,0,cg.width,cg.height);
+            cg.style.display='block';
+        }catch(e){gl=null;cg.style.display='none'}
+    }
+    if(img.complete&&img.naturalWidth)initGL();else img.addEventListener('load',initGL);
+
+    const S={blink:0,jaw:0,round:0,smile:0,browL:0,browR:0,furrow:0,gx:0,gy:0,nod:0};
+    const T={jaw:0,round:0,smile:0,browL:0,browR:0,furrow:0,gx:0,gy:0};
+    const MOODS={neutral:{},happy:{smile:.85,browL:.3,browR:.3},surprised:{browL:1,browR:1,jaw:.3,round:.5},thinking:{smile:-.15,browL:.55,browR:-.1,furrow:.45,gx:-.6,gy:-.7}};
+    let mood='neutral',blinkAt=performance.now()+1500,blinkT0=-1e9,gazeAt=0,gz={x:0,y:0},bump=0,react=0,ov=null,talk=null,ac=null,audioEl=null;
+
+    function setMood(n){
+        if(!MOODS[n])return;mood=n;
+        document.querySelectorAll('.chip').forEach(c=>{const on=c.dataset.m===n;c.classList.toggle('on',on);c.setAttribute('aria-pressed',on)});
+    }
+
+    // Речь по тексту: гласные открывают рот, губные (б п м в ф) смыкают, паузы на знаках препинания
+    const VOW={а:[.95,0],я:[.85,0],о:[.75,.6],ё:[.7,.5],у:[.4,1],ю:[.45,.8],э:[.7,0],е:[.65,0],и:[.4,0],ы:[.4,0],a:[.9,0],e:[.65,0],i:[.4,0],o:[.75,.6],u:[.4,1],y:[.4,0]};
+    const LAB='бпмвфbpmvf',PUNCT=/[.,!?…:;]/;
+    function showSub(text){
+        sub.textContent='';const d=document.createElement('span');d.className='done';sub.append(d,document.createTextNode(text));sub.classList.add('on');
+    }
+    function updateSub(i){talk.shown=i;sub.firstChild.textContent=talk.text.slice(0,i);sub.lastChild.textContent=talk.text.slice(i)}
+    function finish(){
+        talk=null;tag.textContent='ONLINE';
+        setTimeout(()=>{if(!talk)sub.classList.remove('on')},1400);
+    }
+    function stop(){
+        if(window.speechSynthesis)speechSynthesis.cancel();
+        if(audioEl){audioEl.pause();audioEl=null}
+        if(talk){talk=null;tag.textContent='ONLINE';sub.classList.remove('on')}
+    }
+    function say(text,o){
+        o=o||{};text=String(text||'').trim().slice(0,400);if(!text)return;
+        stop();if(o.mood)setMood(o.mood);
+        const rate=clamp(o.rate||1,.6,1.6),ss=window.speechSynthesis;
+        const mine=talk={mode:'text',text,pos:0,cps:15*rate,tts:false,shown:-1,lv:[0,0],lastSpace:-1,t0:performance.now(),silent:!(ss&&window.SpeechSynthesisUtterance)||!!o.silent};
+        tag.textContent='SPEAKING';showSub(text);
+        if(!mine.silent){
+            const u=new SpeechSynthesisUtterance(text);u.lang='ru-RU';u.rate=rate;
+            const vo=ss.getVoices().find(x=>/^ru/i.test(x.lang));if(vo)u.voice=vo;
+            u.onstart=()=>{if(talk===mine){mine.tts=true;mine.pos=0}};
+            u.onboundary=e=>{if(talk===mine&&typeof e.charIndex==='number')mine.pos=e.charIndex};
+            u.onend=()=>{if(talk===mine)finish()};
+            u.onerror=()=>{if(talk===mine){mine.silent=true;mine.tts=false}};
+            ss.speak(u);
+        }
+    }
+    // Речь по звуку: рот открывается по громкости, форма губ по спектру
+    function speakAudio(src,o){
+        o=o||{};stop();if(o.mood)setMood(o.mood);
+        const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
+        ac=ac||new AC();if(ac.resume)ac.resume();
+        const el=new Audio();el.crossOrigin='anonymous';el.src=typeof src==='string'?src:URL.createObjectURL(src);
+        const node=ac.createMediaElementSource(el),an=ac.createAnalyser();an.fftSize=1024;node.connect(an);an.connect(ac.destination);
+        const mine=talk={mode:'audio',an,td:new Uint8Array(an.fftSize),fd:new Uint8Array(an.frequencyBinCount),text:''};
+        tag.textContent='SPEAKING';
+        if(o.text){mine.text=String(o.text).slice(0,400);showSub(mine.text);updateSub(0)}
+        el.onended=el.onerror=()=>{if(talk===mine)finish()};
+        audioEl=el;el.play().catch(()=>{if(talk===mine)finish()});
+    }
+
+    function updateFace(dt,now){
+        const m=MOODS[mood],g=(k)=>m[k]||0;
+        let jaw=0,round=0;
+        if(talk&&talk.mode==='text'){
+            const tx=talk.text,i=Math.floor(talk.pos);
+            if(i<tx.length){
+                const ch=tx[i],lo=ch.toLowerCase();
+                if(VOW[lo]){talk.lv=VOW[lo];jaw=VOW[lo][0];round=VOW[lo][1]}
+                else if(LAB.includes(lo)){jaw=0}
+                else if(ch===' '||PUNCT.test(ch)){jaw=PUNCT.test(ch)?0:talk.lv[0]*.25}
+                else{jaw=Math.max(.18,talk.lv[0]*.45);round=talk.lv[1]*.5}
+                talk.pos+=dt*talk.cps*(PUNCT.test(ch)?.22:1);
+                if(ch===' '&&talk.lastSpace!==i){talk.lastSpace=i;if(Math.random()<.4)bump=Math.max(bump,.35+Math.random()*.3)}
+                if(ch==='!'||ch==='?')bump=Math.max(bump,ch==='!'?.8:.55);
+                if(i!==talk.shown)updateSub(i);
+            }else if(talk.silent?talk.pos>=tx.length+3:(!talk.tts&&now-talk.t0>tx.length/talk.cps*1000+4000))finish();
+        }else if(talk&&talk.mode==='audio'){
+            talk.an.getByteTimeDomainData(talk.td);talk.an.getByteFrequencyData(talk.fd);
+            let r=0;for(let i=0;i<talk.td.length;i++){const x=(talk.td[i]-128)/128;r+=x*x}
+            jaw=clamp((Math.sqrt(r/talk.td.length)-.015)*7,0,1);
+            let lo=0,mi=0;for(let i=2;i<12;i++)lo+=talk.fd[i];for(let i=12;i<64;i++)mi+=talk.fd[i];
+            round=clamp((lo/10-mi/52)/60,0,1)*jaw;
+        }
+        bump=Math.max(0,bump-dt*2.5);react=Math.max(0,react-dt*1.2);
+        // моргание и взгляд
+        if(!calm){
+            if(now>=blinkAt){blinkT0=now;blinkAt=now+(Math.random()<.18?260:2200+Math.random()*3800)}
+            if(now>=gazeAt){gazeAt=now+1200+Math.random()*2500;gz.x=Math.random()<.6?0:(Math.random()-.5)*1.1;gz.y=Math.random()<.6?0:(Math.random()-.5)*.6}
+        }
+        const bt=(now-blinkT0)/1000;let blink=bt>=0&&bt<.16?(bt<.06?bt/.06:1-(bt-.06)/.1):0;
+        T.jaw=Math.max(jaw,g('jaw'));T.round=Math.max(round,g('round'));
+        T.smile=g('smile')+react*.7;
+        T.browL=g('browL')+bump*.6+react*.5;T.browR=g('browR')+bump*.6+react*.5;
+        T.furrow=g('furrow');
+        const gk=talk?0.3:1;T.gx=clamp(g('gx')+gz.x*gk,-1,1);T.gy=clamp(g('gy')+gz.y*gk,-1,1);
+        const k=r=>1-Math.exp(-r*dt);
+        S.jaw+=(T.jaw-S.jaw)*k(T.jaw>S.jaw?30:18);
+        S.round+=(T.round-S.round)*k(20);S.smile+=(T.smile-S.smile)*k(7);
+        S.browL+=(T.browL-S.browL)*k(12);S.browR+=(T.browR-S.browR)*k(12);S.furrow+=(T.furrow-S.furrow)*k(8);
+        S.gx+=(T.gx-S.gx)*k(10);S.gy+=(T.gy-S.gy)*k(10);
+        S.blink=clamp(Math.max(blink,clamp(S.smile,0,1)*.22),0,1);
+        S.nod=talk&&!calm?Math.sin(now/1000*5.5)*S.jaw*1.2:0;
+        if(ov)for(const n in ov)S[n]=ov[n];
+    }
+    function drawFace(){
+        if(!gl)return;
+        gl.uniform1f(U.uBlink,S.blink);gl.uniform1f(U.uJaw,clamp(S.jaw,0,1));gl.uniform1f(U.uRound,clamp(S.round,0,1));gl.uniform1f(U.uSmile,S.smile);
+        gl.uniform1f(U.uBrowL,S.browL);gl.uniform1f(U.uBrowR,S.browR);gl.uniform1f(U.uFurrow,S.furrow);gl.uniform1f(U.uNod,S.nod);gl.uniform2f(U.uGaze,S.gx,S.gy);
+        gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+    }
+
     function mk(init){return{x:Math.random()*W,y:init?Math.random()*H:H*(.9+Math.random()*.1),r:.6+Math.random()*1.6,v:.15+Math.random()*.45,a:.25+Math.random()*.6,p:Math.random()*6.28}}
-    function fit(){const r=box.getBoundingClientRect(),d=Math.min(window.devicePixelRatio||1,2);if(!r.width){W=0;return}W=r.width;H=r.height;cv.width=W*d;cv.height=H*d;cx.setTransform(d,0,0,d,0,0);P=Array.from({length:32},()=>mk(true))}
+    function fit(){
+        const r=box.getBoundingClientRect(),d=Math.min(window.devicePixelRatio||1,2);if(!r.width){W=0;return}
+        W=r.width;H=r.height;cv.width=W*d;cv.height=H*d;cx.setTransform(d,0,0,d,0,0);P=Array.from({length:32},()=>mk(true));
+        cg.width=W*d;cg.height=H*d;if(gl)gl.viewport(0,0,cg.width,cg.height);
+    }
     new ResizeObserver(fit).observe(box);
-    function tick(){
+    let last=performance.now();
+    function tick(now){
+        const dt=Math.min(.05,(now-last)/1000);last=now;
         if(W&&!document.hidden){
-            cx.clearRect(0,0,W,H);cx.fillStyle='#8fd0ff';cx.shadowColor='#4aa8ff';cx.shadowBlur=8;
-            for(const q of P){
-                q.y-=q.v;q.p+=.03;q.x+=Math.sin(q.p)*.25;
-                if(q.y<-4)Object.assign(q,mk(false));
-                cx.globalAlpha=q.a*Math.min(1,q.y/H*1.6)*(.6+.4*Math.sin(q.p*2));
-                cx.beginPath();cx.arc(q.x,q.y,q.r,0,6.283);cx.fill();
+            updateFace(dt,now);drawFace();
+            if(!calm){
+                cx.clearRect(0,0,W,H);cx.fillStyle='#8fd0ff';cx.shadowColor='#4aa8ff';cx.shadowBlur=8;
+                for(const q of P){
+                    q.y-=q.v;q.p+=.03;q.x+=Math.sin(q.p)*.25;
+                    if(q.y<-4)Object.assign(q,mk(false));
+                    cx.globalAlpha=q.a*Math.min(1,q.y/H*1.6)*(.6+.4*Math.sin(q.p*2));
+                    cx.beginPath();cx.arc(q.x,q.y,q.r,0,6.283);cx.fill();
+                }
             }
         }
         requestAnimationFrame(tick);
     }
-    if(!calm)tick();
+    requestAnimationFrame(tick);
+    document.addEventListener('visibilitychange',()=>{if(document.hidden)stop()});
+
     box.addEventListener('pointermove',e=>{if(calm)return;const r=box.getBoundingClientRect();st.style.transform=`rotateY(${((e.clientX-r.left)/r.width-.5)*10}deg) rotateX(${-((e.clientY-r.top)/r.height-.5)*8}deg)`});
     ['pointerleave','pointerup','pointercancel'].forEach(n=>box.addEventListener(n,()=>{st.style.transform=''}));
     box.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();holoTap()}});
-    window.holoTap=function(){vib();box.classList.remove('glitch');void box.offsetWidth;box.classList.add('glitch');showToast('LISA на связи');setTimeout(()=>box.classList.remove('glitch'),600)};
+    window.holoTap=function(){vib();react=1;blinkAt=0;box.classList.remove('glitch');void box.offsetWidth;box.classList.add('glitch');showToast('LISA на связи');setTimeout(()=>box.classList.remove('glitch'),600)};
+    window.lisa={say,speakAudio,stop,mood:setMood,react:()=>{react=1},pose:o=>{ov=o||null}};
+    window.sayFromInput=function(){vib();say(document.getElementById('say-text').value.trim()||'Привет! Я LISA. Рада тебя видеть.')};
 })();
 </script>
 </body>
