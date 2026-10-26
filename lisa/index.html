@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>LISA · лицо ассистента</title>
+<style>
+:root{--bg:#050a1a;--card:#0a1226;--fg:#dbe8ff;--sec:#7f93b8;--line:rgba(110,180,255,.22);--accent:#4aa8ff;--soft:#9fd0ff;--primary:#7c5cff;color-scheme:dark}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;padding:20px max(16px,env(safe-area-inset-right,0px)) calc(20px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+main{max-width:440px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+.card{background:var(--card);border:1px solid rgba(255,255,255,.05);border-radius:20px;padding:20px}
+.header{font-size:12px;color:var(--sec);text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:14px}
+
+/* голограмма */
+.holo-card{padding:0;overflow:hidden;position:relative;border-color:rgba(74,168,255,.28);box-shadow:0 0 40px rgba(40,110,255,.25),0 10px 30px rgba(0,0,0,.3)}
+.holo{position:relative;aspect-ratio:490/688;background:var(--bg);overflow:hidden}
+.holo-face{position:absolute;inset:0;filter:saturate(1.1) contrast(1.04);animation:pulse 3.5s ease-in-out infinite}
+.holo-face>*{position:absolute;inset:0;width:100%;height:100%;display:block}
+.holo-fx{position:absolute;inset:0;pointer-events:none;animation:flicker 5s infinite}
+#fx{position:absolute;inset:0;width:100%;height:100%}
+.scan{position:absolute;inset:0;overflow:hidden;mix-blend-mode:screen;background:repeating-linear-gradient(0deg,rgba(120,180,255,.06) 0 1px,transparent 1px 3px)}
+.scan::after{content:'';position:absolute;left:0;right:0;top:-25%;height:22%;background:linear-gradient(180deg,transparent,rgba(110,190,255,.2),transparent);animation:sweep 4.5s linear infinite}
+.rings{position:absolute;left:0;right:0;bottom:2.5%;height:8%}
+.rings i{position:absolute;left:59.6%;top:50%;width:62%;aspect-ratio:6/1;border:1.5px solid rgba(130,205,255,.85);border-radius:50%;box-shadow:0 0 14px rgba(80,170,255,.7),inset 0 0 14px rgba(80,170,255,.35);transform:translate(-50%,-50%) scale(.3);opacity:0;animation:ring 3.2s ease-out infinite}
+.rings i:nth-child(2){animation-delay:1.07s}.rings i:nth-child(3){animation-delay:2.14s}
+.tag{position:absolute;top:14px;left:14px;z-index:3;display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:rgba(10,20,45,.55);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid var(--line);font-size:11px;font-weight:700;letter-spacing:1.2px;color:var(--soft)}
+.tag b{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent);animation:blink 1.6s ease-in-out infinite}
+.sub{position:absolute;left:12px;right:12px;bottom:11%;z-index:3;padding:8px 12px;border-radius:12px;background:rgba(5,12,30,.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid var(--line);text-align:center;font-size:14px;line-height:1.35;font-weight:600;color:rgba(223,240,255,.5);opacity:0;transition:opacity .3s;pointer-events:none}
+.sub.on{opacity:1}.sub .done{color:#fff;text-shadow:0 0 8px rgba(60,140,255,.9)}
+.note{position:absolute;left:12px;right:12px;top:56px;z-index:3;padding:8px 12px;border-radius:12px;background:rgba(40,12,20,.7);border:1px solid rgba(255,100,100,.35);font-size:13px;line-height:1.4;color:#ffd0d0}
+@keyframes flicker{0%,46%,52%,100%{opacity:1}47%{opacity:.82}48%{opacity:1}49%{opacity:.9}50%{opacity:1}51%{opacity:.86}}
+@keyframes pulse{0%,100%{filter:saturate(1.1) contrast(1.04) brightness(1)}50%{filter:saturate(1.25) contrast(1.06) brightness(1.1)}}
+@keyframes sweep{to{top:100%}}
+@keyframes ring{0%{transform:translate(-50%,-50%) scale(.3);opacity:.9}100%{transform:translate(-50%,-50%) scale(1.15);opacity:0}}
+@keyframes blink{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.holo-face,.holo-fx,.holo-fx *,.tag b{animation:none!important}}
+
+/* управление */
+.inp{width:100%;padding:14px 16px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);color:var(--fg);font:inherit;font-size:16px;outline:none;margin-bottom:12px}
+.inp:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(124,92,255,.18)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.btn{padding:14px;border-radius:14px;font:inherit;font-size:15px;font-weight:600;cursor:pointer;border:none;outline:none;background:rgba(255,255,255,.05);color:var(--sec);border:1px solid rgba(255,255,255,.06);transition:.2s}
+.btn.go{background:var(--primary);color:#fff;border-color:transparent;box-shadow:0 4px 15px rgba(124,92,255,.3)}
+.btn:active{transform:scale(.97)}
+.btn:focus-visible,.chip:focus-visible,.inp:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{padding:8px 14px;border-radius:999px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;background:rgba(255,255,255,.05);color:var(--sec);border:1px solid rgba(255,255,255,.06);outline:none;transition:.2s}
+.chip.on{background:rgba(74,168,255,.15);color:var(--soft);border-color:rgba(74,168,255,.5)}
+.row+.group,.group+.group{margin-top:16px}
+.label{font-size:12px;color:var(--sec);margin-bottom:8px}
+.meter{height:6px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:10px}
+.meter i{display:block;height:100%;width:0;background:var(--accent);transition:width .08s}
+input[type=file]{display:none}
+.small{font-size:12px;color:var(--sec);line-height:1.5;margin:12px 0 0}
+</style>
+</head>
+<body>
+<main>
+  <div class="card holo-card">
+    <div class="holo">
+      <div class="tag"><b></b>LISA · <span id="state">ONLINE</span></div>
+      <div class="holo-face">
+        <img id="fallback" src="../assets/lisa.webp" alt="LISA" draggable="false" style="object-fit:cover">
+        <canvas id="face" role="img" aria-label="Лицо ассистента LISA"></canvas>
+      </div>
+      <div class="holo-fx">
+        <canvas id="fx"></canvas>
+        <div class="scan"></div>
+        <div class="rings"><i></i><i></i><i></i></div>
+      </div>
+      <div id="sub" class="sub" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="header">Разговор</div>
+    <input id="say" class="inp" type="text" maxlength="400" aria-label="Что сказать LISA" placeholder="Что сказать LISA?" value="Привет! Я LISA. Чем могу помочь?">
+    <div class="row">
+      <button id="btn-say" class="btn go" type="button">Сказать</button>
+      <button id="btn-stop" class="btn" type="button">Стоп</button>
+    </div>
+    <div class="group">
+      <div class="label">Состояние</div>
+      <div class="chips" id="states" role="group" aria-label="Состояние">
+        <button class="chip on" data-v="idle" aria-pressed="true" type="button">Покой</button>
+        <button class="chip" data-v="listening" aria-pressed="false" type="button">Слушает</button>
+        <button class="chip" data-v="thinking" aria-pressed="false" type="button">Думает</button>
+      </div>
+    </div>
+    <div class="group">
+      <div class="label">Настроение</div>
+      <div class="chips" id="moods" role="group" aria-label="Настроение">
+        <button class="chip on" data-v="neutral" aria-pressed="true" type="button">Спокойно</button>
+        <button class="chip" data-v="happy" aria-pressed="false" type="button">Радость</button>
+        <button class="chip" data-v="surprised" aria-pressed="false" type="button">Удивление</button>
+        <button class="chip" data-v="thinking" aria-pressed="false" type="button">Раздумье</button>
+        <button class="chip" data-v="sad" aria-pressed="false" type="button">Грусть</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="header">Голосовой цикл</div>
+    <div class="row">
+      <button id="btn-demo" class="btn" type="button">Демо диалога</button>
+      <label class="btn" for="file" style="text-align:center">Озвучить файлом</label>
+    </div>
+    <input id="file" type="file" accept="audio/*">
+    <div class="row" style="margin-top:12px">
+      <button id="btn-mic" class="btn" type="button" aria-pressed="false">Микрофон</button>
+      <button id="btn-react" class="btn" type="button">Реакция</button>
+    </div>
+    <div class="meter" aria-hidden="true"><i id="meter"></i></div>
+    <p class="small">Файл или звук ответа ассистента двигает губы по громкости и спектру. Без звука (нет голоса в системе) лицо говорит по тексту.</p>
+  </div>
+</main>
+
+<script src="face-data.js"></script>
+<script src="lisa-face.js"></script>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const face=$('face'),sub=$('sub'),stateTag=$('state'),fallback=$('fallback');
+  let lisa=null;
+
+  /* частицы вокруг голограммы */
+  (function(){
+    const cv=$('fx'),cx=cv.getContext('2d'),box=cv.parentElement,calm=matchMedia('(prefers-reduced-motion:reduce)').matches;
+    let W=0,H=0,P=[];
+    const mk=i=>({x:Math.random()*W,y:i?Math.random()*H:H*(.9+Math.random()*.1),r:.6+Math.random()*1.6,v:.15+Math.random()*.45,a:.25+Math.random()*.6,p:Math.random()*6.28});
+    new ResizeObserver(()=>{const r=box.getBoundingClientRect(),d=Math.min(devicePixelRatio||1,2);if(!r.width){W=0;return}W=r.width;H=r.height;cv.width=W*d;cv.height=H*d;cx.setTransform(d,0,0,d,0,0);P=Array.from({length:32},()=>mk(true))}).observe(box);
+    (function tick(){
+      if(W&&!calm&&!document.hidden){
+        cx.clearRect(0,0,W,H);cx.fillStyle='#8fd0ff';cx.shadowColor='#4aa8ff';cx.shadowBlur=8;
+        for(const q of P){q.y-=q.v;q.p+=.03;q.x+=Math.sin(q.p)*.25;if(q.y<-4)Object.assign(q,mk(false));cx.globalAlpha=q.a*Math.min(1,q.y/H*1.6)*(.6+.4*Math.sin(q.p*2));cx.beginPath();cx.arc(q.x,q.y,q.r,0,6.283);cx.fill()}
+      }
+      requestAnimationFrame(tick);
+    })();
+  })();
+
+  function chips(id,fn){
+    const g=$(id);
+    g.addEventListener('click',e=>{const b=e.target.closest('.chip');if(!b||!lisa)return;fn(b.dataset.v)});
+    return v=>g.querySelectorAll('.chip').forEach(c=>{const on=c.dataset.v===v;c.classList.toggle('on',on);c.setAttribute('aria-pressed',on)});
+  }
+  const markState=chips('states',v=>lisa.setState(v));
+  const markMood=chips('moods',v=>lisa.setMood(v));
+
+  function showSub(t,done){
+    if(t==null){sub.classList.remove('on');return}
+    sub.textContent='';const d=document.createElement('span');d.className='done';d.textContent=t.slice(0,done);
+    sub.append(d,document.createTextNode(t.slice(done)));sub.classList.add('on');
+  }
+
+  LisaFace.create(face,{image:'../assets/lisa.webp'}).then(l=>{
+    lisa=l;window.lisa=l;fallback.style.display='none';
+    l.on('text',e=>showSub(e.text,e.done));
+    l.on('speakstart',()=>{stateTag.textContent='SPEAKING'});
+    l.on('speakend',()=>{stateTag.textContent=({idle:'ONLINE',listening:'LISTENING',thinking:'THINKING'})[l.state];setTimeout(()=>{if(!l.speaking)showSub(null)},1400)});
+    l.on('state',v=>{markState(v);stateTag.textContent=({idle:'ONLINE',listening:'LISTENING',thinking:'THINKING'})[v]});
+    l.on('mood',markMood);
+  }).catch(err=>{
+    face.style.display='none';
+    const n=document.createElement('div');n.className='note';n.setAttribute('role','alert');
+    n.textContent=location.protocol==='file:'?'Откройте страницу через http (например, python3 -m http.server): из файла браузер не даёт читать изображение в WebGL.':'Лицо не запустилось: '+err.message;
+    document.querySelector('.holo').append(n);
+  });
+
+  const say=()=>lisa&&lisa.say($('say').value.trim()||'Привет! Я LISA.');
+  $('btn-say').onclick=say;
+  $('say').addEventListener('keydown',e=>{if(e.key==='Enter')say()});
+  $('btn-stop').onclick=()=>lisa&&lisa.stop();
+  $('btn-react').onclick=()=>lisa&&lisa.react();
+
+  // цикл «слушает -> думает -> отвечает» как у голосового помощника
+  $('btn-demo').onclick=()=>{
+    if(!lisa)return;lisa.stop();lisa.setState('listening');
+    setTimeout(()=>{lisa.setState('thinking')},2200);
+    setTimeout(()=>{lisa.setState('idle');lisa.say('Сейчас на улице плюс восемнадцать, облачно. Зонт не нужен.',{mood:'happy'})},3900);
+  };
+
+  $('file').onchange=e=>{const f=e.target.files[0];if(f&&lisa)lisa.speakAudio(f,{text:f.name.replace(/\.[^.]+$/,'')});e.target.value=''};
+
+  // микрофон: лицо слушает и реагирует на громкость
+  let mic=null;
+  $('btn-mic').onclick=async()=>{
+    const b=$('btn-mic');
+    if(mic){mic.stop();mic=null;b.setAttribute('aria-pressed','false');b.textContent='Микрофон';$('meter').style.width='0';lisa&&(lisa.level(0),lisa.setState('idle'));return}
+    if(!lisa||!navigator.mediaDevices)return;
+    try{
+      const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      const ac=new (window.AudioContext||window.webkitAudioContext)(),an=ac.createAnalyser();an.fftSize=512;ac.createMediaStreamSource(stream).connect(an);
+      const td=new Uint8Array(an.fftSize);let on=true;
+      (function loop(){if(!on)return;an.getByteTimeDomainData(td);let s=0;for(const v of td){const x=(v-128)/128;s+=x*x}const lv=Math.min(1,Math.sqrt(s/td.length)*6);lisa.level(lv);$('meter').style.width=Math.round(lv*100)+'%';requestAnimationFrame(loop)})();
+      mic={stop(){on=false;stream.getTracks().forEach(t=>t.stop());ac.close()}};
+      lisa.setState('listening');b.setAttribute('aria-pressed','true');b.textContent='Выключить микрофон';
+    }catch(err){$('btn-mic').textContent='Нет доступа к микрофону'}
+  };
+})();
+</script>
+</body>
+</html>
