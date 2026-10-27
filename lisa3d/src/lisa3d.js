@@ -133,12 +133,12 @@ function buildHair(buf, opts) {
   const o = [dv.getFloat32(12, true), dv.getFloat32(16, true), dv.getFloat32(20, true)], q = dv.getFloat32(24, true);
   const P = new Int16Array(buf, 28, n * k * 3), Wb = new Uint8Array(buf, 28 + n * k * 6, n * k * 2), SP = new Uint8Array(buf, 28 + n * k * 8, n * 2);
   const nv = n * k * 2, pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), uv = new Float32Array(nv * 2), col = new Float32Array(nv * 3);
-  const si = new Uint16Array(nv * 4), sw = new Float32Array(nv * 4), idx = new Uint32Array(n * (k - 1) * 6);
+  const si = new Uint16Array(nv * 4), sw = new Float32Array(nv * 4), idx = new Uint32Array(n * (k - 1) * 6), hv = new Float32Array(nv * 4);
   const C = new THREE.Vector3(0, 1.665, .05), p = new THREE.Vector3(), a = new THREE.Vector3(), b = new THREE.Vector3(), T = new THREE.Vector3(), R = new THREE.Vector3(), B = new THREE.Vector3();
   const pt = (s, j, v) => v.set(o[0] + P[(s * k + j) * 3] * q, o[1] + P[(s * k + j) * 3 + 1] * q, o[2] + P[(s * k + j) * 3 + 2] * q);
   let ii = 0;
   for (let s = 0; s < n; s++) {
-    const width = SP[s * 2] / 10000, tone = SP[s * 2 + 1] / 255 * 1.2, colU = (s % 4) * .25;
+    const width = SP[s * 2] / 10000, tone = SP[s * 2 + 1] / 255 * 1.2, colU = (s % 4) * .25, phase = (s * 2.399) % 6.283;
     for (let j = 0; j < k; j++) {
       const t = j / (k - 1);
       pt(s, j, p); pt(s, Math.min(k - 1, j + 1), a); pt(s, Math.max(0, j - 1), b);
@@ -156,6 +156,10 @@ function buildHair(buf, opts) {
         const wh = Wb[(s * k + j) * 2] / 255, wn = Wb[(s * k + j) * 2 + 1] / 255;
         si[v * 4] = 0; si[v * 4 + 1] = 1; si[v * 4 + 2] = 2;
         sw[v * 4] = wh; sw[v * 4 + 1] = wn; sw[v * 4 + 2] = Math.max(0, 1 - wh - wn);
+        // для физики: сектор вокруг головы, доля соседнего, насколько прядь висит (0 у кожи, 1 на кончиках), фаза
+        const sec = (Math.atan2(p.x, p.z - C.z) / (2 * Math.PI) + .5) * HAIR_SECTORS;
+        hv[v * 4] = Math.floor(sec) % HAIR_SECTORS; hv[v * 4 + 1] = sec - Math.floor(sec);
+        hv[v * 4 + 2] = clamp((1.66 - p.y) / .2, 0, 1); hv[v * 4 + 3] = phase;
       }
       if (j < k - 1) { const v = (s * k + j) * 2; idx.set([v, v + 1, v + 2, v + 1, v + 3, v + 2], ii); ii += 6; }
     }
@@ -167,14 +171,70 @@ function buildHair(buf, opts) {
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   geo.setAttribute('skinIndex', new THREE.BufferAttribute(si, 4));
   geo.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4));
+  geo.setAttribute('aHair', new THREE.BufferAttribute(hv, 4));
   geo.setIndex(new THREE.BufferAttribute(idx, 1));
   const mat = new THREE.MeshStandardMaterial({
     map: hairTexture(), color: new THREE.Color(opts.hairColor || '#5d3d29'), vertexColors: true, roughness: .5, metalness: 0,
     alphaTest: .5, alphaToCoverage: true, side: THREE.DoubleSide
   });
+  // смещение прядей от пружин (uSway) и лёгкое шевеление после скиннинга
+  const uSway = { value: Array.from({ length: HAIR_SECTORS }, () => new THREE.Vector3()) }, uHairT = { value: 0 };
+  mat.onBeforeCompile = sh => {
+    sh.uniforms.uSway = uSway; sh.uniforms.uHairT = uHairT;
+    sh.vertexShader = `uniform vec3 uSway[${HAIR_SECTORS}];\nuniform float uHairT;\nattribute vec4 aHair;\n` + sh.vertexShader.replace('#include <skinning_vertex>', `#include <skinning_vertex>
+      int hs = int(aHair.x + .5), hn = hs == ${HAIR_SECTORS - 1} ? 0 : hs + 1;
+      float hh = aHair.z;
+      transformed += mix(uSway[hs], uSway[hn], aHair.y) * hh * hh
+        + vec3(sin(uHairT * 1.7 + aHair.w), .4 * sin(uHairT * 1.1 + aHair.w * 2.3), cos(uHairT * 1.3 + aHair.w * 1.3)) * .0025 * hh;`);
+  };
+  mat.customProgramCacheKey = () => 'hair';
   const mesh = new THREE.SkinnedMesh(geo, mat);
   mesh.name = 'hair'; mesh.frustumCulled = false; mesh.castShadow = true; mesh.renderOrder = 3;
+  mesh.userData.sim = { uSway, uHairT, C };
   return mesh;
+}
+
+/* физика волос: пружина на каждый сектор вокруг головы. Цель — точка, прикреплённая к голове,
+   но при наклоне частично «висящая» вниз (гравитация); пружина отстаёт от движений и покачивается */
+const HAIR_SECTORS = 6;
+function hairPhysics(hair, head) {
+  const { uSway, uHairT, C } = hair.userData.sim;
+  head.updateMatrixWorld(true);
+  const inv = head.matrixWorld.clone().invert();
+  const pivotL = C.clone().applyMatrix4(inv);                        // центр головы в системе кости
+  const q0 = head.getWorldQuaternion(new THREE.Quaternion());
+  const anchors = [], rest = [], P = [], V = [], K = [];
+  for (let i = 0; i < HAIR_SECTORS; i++) {
+    const az = (i / HAIR_SECTORS - .5) * 2 * Math.PI;
+    const w = new THREE.Vector3(C.x + Math.sin(az) * .1, C.y - .13, C.z + Math.cos(az) * .1);
+    anchors.push(w.clone().applyMatrix4(inv)); rest.push(w.clone().sub(C));
+    P.push(w.clone()); V.push(new THREE.Vector3()); K.push(55 + 25 * ((i * .618) % 1));
+  }
+  const pivot = new THREE.Vector3(), rigid = new THREE.Vector3(), target = new THREE.Vector3(), a = new THREE.Vector3();
+  const qr = new THREE.Quaternion(), tw = new THREE.Quaternion(), sw = new THREE.Quaternion(), qg = new THREE.Quaternion(), qi = new THREE.Quaternion();
+  let t = 0, init = false;
+  return dt => {
+    t += dt; uHairT.value = t;
+    pivot.copy(pivotL).applyMatrix4(head.matrixWorld);
+    // поворот головы от покоя: наклон (swing) наполовину гасим гравитацией, поворот вокруг вертикали оставляем
+    qr.copy(head.getWorldQuaternion(qi)).multiply(q0.clone().invert());
+    tw.set(0, qr.y, 0, qr.w).normalize(); sw.copy(qr).multiply(tw.clone().invert());
+    qg.slerpQuaternions(sw, qi.identity(), .35).multiply(tw);
+    const steps = Math.max(1, Math.ceil(dt / .012)), h = dt / steps;
+    for (let i = 0; i < HAIR_SECTORS; i++) {
+      rigid.copy(anchors[i]).applyMatrix4(head.matrixWorld);
+      target.copy(rest[i]).applyQuaternion(qg).add(pivot);
+      if (!init || dt > .2) { P[i].copy(target); V[i].set(0, 0, 0); }
+      for (let s = 0; s < steps; s++) {
+        a.subVectors(target, P[i]).multiplyScalar(K[i]).addScaledVector(V[i], -6);
+        V[i].addScaledVector(a, h); P[i].addScaledVector(V[i], h);
+      }
+      const o = uSway.value[i].subVectors(P[i], rigid);
+      o.y = clamp(o.y, -.02, .03);                                       // вниз мало: кончики лежат на плечах
+      o.clampLength(0, .045);
+    }
+    init = true;
+  };
 }
 
 function makeFloor(U, opts) {
@@ -317,12 +377,14 @@ export async function create(container, opts = {}) {
   const restQ = {}; for (const n in bones) restQ[n] = bones[n].quaternion.clone();
 
   // свои волосы вместо хвоста: привязка к голове, шее и груди в позе покоя
+  let hairSim = null;
   if (hairBuf) {
     const hair = buildHair(hairBuf, opts);
     if (!real) hair.material = holoMaterial(hair.material, U, 1);
     avatar.add(hair); avatar.updateMatrixWorld(true);
     hair.bind(new THREE.Skeleton([bones.Head, bones.Neck, bones.Spine2]));
     avatar.traverse(o => { if (o.isMesh && /ponytail/i.test(o.name)) o.visible = false; });
+    if (real) hairSim = hairPhysics(hair, bones.Head);
   }
 
   // пальцы: расслабленный изгиб (в записях их движения нет)
@@ -684,6 +746,7 @@ export async function create(container, opts = {}) {
     faceViewer(dt, wantLook > .5 ? .75 : 0);
     lookAtCamera(lookW);
     updateTail(dt);
+    if (hairSim) hairSim(calm ? 0 : dt);
     // лицо
     const [vj, vr, vs, vp] = visemes(dt, now);
     const m = MOODS[mood] || {};
