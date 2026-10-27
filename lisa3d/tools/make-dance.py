@@ -173,16 +173,41 @@ def spot_world(pose, name, side):
     return pose.P[k] + D.apply(off), D.apply(pole)
 
 
+# торс как эллиптическая капсула от таза до шеи: полуоси (вбок, вперёд) на уровне таза, талии, груди, шеи
+BODY = np.array([[.17, .12], [.13, .10], [.15, .12], [.06, .06]])
+HAND = .035                                                   # толщина ладони над кожей
+HUG = {"hip", "thigh", "rib", "neck", "chest"}                # позы, где рука лежит на теле
+
+
+def on_body(pose, target, hug):
+    """вытолкнуть запястье из торса и головы; при hug — прижать к коже (скольжение по телу)"""
+    a, b = pose.P[ix["Hips"]], pose.P[ix["Neck"]]
+    ax = b - a; s = np.clip(np.dot(target - a, ax) / np.dot(ax, ax), 0, 1)
+    c = a + ax * s
+    Rb = pose.W[ix["Spine1"]] * WB[ix["Spine1"]].inv()
+    X, Z = Rb.apply([1., 0, 0]), Rb.apply([0, 0, 1.])
+    rx, rz = (np.interp(s * 3, range(4), BODY[:, k]) + HAND for k in (0, 1))
+    d = target - c; dx, dz = np.dot(d, X), np.dot(d, Z)
+    e = np.hypot(dx / rx, dz / rz)
+    if e < 1 or (hug and 0 < s < 1):
+        k = 1 / max(e, 1e-6)
+        target = target + X * dx * (k - 1) + Z * dz * (k - 1)
+    h = pose.P[ix["Head"]] + Rb.apply([0, .09, .02]); r = .11 + HAND
+    v = target - h; dist = np.linalg.norm(v)
+    if dist < r: target = h + v / max(dist, 1e-6) * r
+    return target
+
+
 def frame(t, mirror):
     w = 2 * np.pi / 2.5
     wa, wb, wc = window(t, 0, 5), window(t, 5, 10), window(t, 10, 15)
     # бёдра: покачивание (A, слабее в C) и круги (B)
-    sway = (.07 * wa + .03 * wc) * np.sin(w * t)
-    hx = sway + wb * .06 * np.cos(w * t)
-    hz = wb * .05 * np.sin(w * t) - wc * .04 * np.sin(w * t - 2.1)
-    hy = -.035 - .02 * np.cos(2 * w * t) * (wa + wb) - wc * .04 * (.5 + .5 * np.sin(w * t - 2.5))
-    wave = wc * 1.3 * np.sin(w * t)
-    roll = 3.4 * hx; yaw = .35 * np.sin(2 * np.pi * t / T) + 1.4 * hx
+    sway = (.11 * wa + .05 * wc) * np.sin(w * t)
+    hx = sway + wb * .09 * np.cos(w * t)
+    hz = wb * .07 * np.sin(w * t) - wc * .06 * np.sin(w * t - 2.1)
+    hy = -.04 - .025 * np.cos(2 * w * t) * (wa + wb) - wc * .05 * (.5 + .5 * np.sin(w * t - 2.5))
+    wave = wc * 1.7 * np.sin(w * t)
+    roll = 3.6 * hx; yaw = .35 * np.sin(2 * np.pi * t / T) + 1.5 * hx
     pitch = -2.2 * hz - wc * .24 * np.sin(w * t - 2.1)
     hx *= mirror; roll *= mirror; yaw *= mirror
 
@@ -199,8 +224,8 @@ def frame(t, mirror):
 
     # ноги: стопы стоят, у свободной ноги пятка приподнята
     for side, leg in ((1, "Left"), (-1, "Right")):
-        free = smooth(np.clip(-side * hx / .05, 0, 1)) * (wa + wc)
-        h = .05 * free
+        free = smooth(np.clip(-side * hx / .07, 0, 1)) * (wa + wc)
+        h = .08 * free
         foot = FEET[side] if mirror == 1 else FEET[-side] * [-1, 1, 1]
         target = foot + [0, h, .3 * h]
         A = p.P[ix[leg + "UpLeg"]]
@@ -238,6 +263,7 @@ def frame(t, mirror):
             out = a0 + a1 - 2 * ax_o; out -= ax_u * (out @ ax_u); out /= np.linalg.norm(out) + 1e-9
             target = a0 * (1 - u) + a1 * u + (out * .04 + ax_u * .0) * np.sin(np.pi * u) * (s0 != s1)
         if s0 == s1 == "over": target += np.array([.02 * np.sin(w * t), .01 * np.sin(2 * w * t), 0])
+        target = on_body(p, target, s0 in HUG and s1 in HUG)   # ведёт ладонью по телу, не сквозь
         pole = p0 * (1 - u) + p1 * u
         lift = np.clip((target[1] - p.P[ix[arm + "Arm"]][1]) / .25, 0, 1)
         p.world_delta(arm + "Shoulder", R.from_euler("z", side * .22 * smooth(lift)))
