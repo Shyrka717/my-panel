@@ -18,20 +18,33 @@ img_path, model_path, out_path = sys.argv[1:4]
 im = Image.open(img_path).convert("RGB")
 W, H = im.size
 
-# детектор лучше работает на крупном лице: берём область вокруг центра и увеличиваем
-S = 3
-cx0, cy0, cx1, cy1 = int(W * .28), int(H * .06), int(W * .92), int(H * .47)
-crop = im.crop((cx0, cy0, cx1, cy1)).resize(((cx1 - cx0) * S, (cy1 - cy0) * S), Image.LANCZOS)
 opts = vision.FaceLandmarkerOptions(
     base_options=mpt.BaseOptions(model_asset_path=model_path),
     running_mode=vision.RunningMode.IMAGE, num_faces=1,
     min_face_detection_confidence=.2, min_face_presence_confidence=.2)
-res = vision.FaceLandmarker.create_from_options(opts).detect(
-    mp.Image(image_format=mp.ImageFormat.SRGB, data=np.array(crop)))
-if not res.face_landmarks:
+landmarker = vision.FaceLandmarker.create_from_options(opts)
+
+def detect(box, face_px):
+    """разметка в области box; область увеличивается так, чтобы её ширина была около face_px"""
+    x0, y0, x1, y1 = [int(round(v)) for v in box]
+    x0, y0, x1, y1 = max(0, x0), max(0, y0), min(W, x1), min(H, y1)
+    s = face_px / (x1 - x0)
+    crop = im.crop((x0, y0, x1, y1)).resize((int((x1 - x0) * s), int((y1 - y0) * s)), Image.LANCZOS)
+    res = landmarker.detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=np.array(crop)))
+    if not res.face_landmarks: return None
+    cw, ch = crop.size
+    return np.array([[x0 + p.x * cw / s, y0 + p.y * ch / s, p.z * cw / s] for p in res.face_landmarks[0]])
+
+# 1) грубо по всему кадру, 2) точно по увеличенной области вокруг найденного лица
+P = detect((0, 0, W, H), 1100)
+if P is None:
+    P = detect((W * .28, H * .06, W * .92, H * .47), 900)   # запасной вариант: лицо в верхней части кадра
+if P is None:
     sys.exit("лицо не найдено")
-cw, ch = crop.size
-P = np.array([[cx0 + p.x * cw / S, cy0 + p.y * ch / S, p.z * cw / S] for p in res.face_landmarks[0]])
+fx0, fy0 = P[:, 0].min(), P[:, 1].min(); fx1, fy1 = P[:, 0].max(), P[:, 1].max()
+mx, my = (fx1 - fx0) * .6, (fy1 - fy0) * .6
+P2 = detect((fx0 - mx, fy0 - my, fx1 + mx, fy1 + my), 1000)
+if P2 is not None: P = P2
 
 def edges(name):
     return [(c.start, c.end) for c in getattr(C, name)]

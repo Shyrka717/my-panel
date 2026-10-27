@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Ассистент</title>
+<style>
+:root{--bg:#1b2129;color-scheme:dark}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg)}
+#stage{position:fixed;inset:0}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script src="../lisa3d/lisa3d.js"></script>
+<script>
+// параметры адреса: ?dance=0 не танцевать при запуске, ?after=25 через сколько секунд тишины снова танцевать, ?bg=1b2129 цвет фона
+(function(){
+  const q=new URLSearchParams(location.search);
+  const bg=/^[0-9a-fA-F]{6}$/.test(q.get('bg')||'')?'#'+q.get('bg'):'#1b2129';
+  document.documentElement.style.setProperty('--bg',bg);
+  const toHost=m=>{try{if(window.parent!==window)window.parent.postMessage(Object.assign({lisa:true},m),'*')}catch(e){/* хост недоступен */}};
+  Lisa3D.create(document.getElementById('stage'),{
+    avatar:'../lisa3d/avatar.glb',avatarData:window.__LISA3D_AVATAR_BUF,
+    motions:'../lisa3d/motions.bin',motionsData:window.__LISA3D_MOTIONS_BUF,
+    motionsMeta:window.__LISA3D_META||'../lisa3d/motions.json',
+    style:'real',background:bg,floor:'#20272f',accent:'#45dcff',label:'Ассистент',
+    suitMap:window.__SUIT_MAP||'suit.webp',suitGlow:window.__SUIT_GLOW||'suit-glow.webp',skinMap:window.__SKIN_MAP||'skin.webp',eyeMap:window.__EYE_MAP||'eyes.webp',hideBrows:true,
+    hairFile:'hair.bin',hairData:window.__HAIR_BUF,hairColor:'#6e4632',
+    startDancing:q.get('dance')!=='0',
+    danceAfter:+q.get('after')||25
+  }).then(l=>{
+    window.lisa=l;
+    ['speakstart','speakend','state','action'].forEach(n=>l.on(n,v=>toHost({event:n,value:v})));
+    window.dispatchEvent(new Event('lisa-ready'));
+    if(typeof window.onLisaReady==='function')window.onLisaReady(l);
+    toHost({event:'ready'});
+  }).catch(err=>{console.warn('Ассистент:',err&&err.message);toHost({event:'error',message:String(err&&err.message)})});
+  // команды от приложения: postMessage({lisa:'message', text:'станцуй'}, '*')
+  const str=(v,n)=>typeof v==='string'?v.slice(0,n):'';
+  const num=v=>Math.min(1,Math.max(0,+v||0));
+  window.addEventListener('message',e=>{
+    const m=e.data,l=window.lisa;
+    if(!l||!m||typeof m.lisa!=='string')return;
+    if(e.source&&e.source!==window.parent&&e.source!==window)return;
+    switch(m.lisa){
+      case 'message':toHost({event:'command',value:l.message(str(m.text,600))});break;
+      case 'do':l.do(str(m.action,20),{style:str(m.style,20)||null});break;
+      case 'say':l.say(str(m.text,600),{mood:str(m.mood,20)||undefined,silent:!!m.silent});break;
+      case 'audio':if(typeof m.src==='string'&&/^(https?:|blob:|data:audio\/)/.test(m.src))l.speakAudio(m.src,{text:str(m.text,600)});break;
+      case 'feed':l.feed(num(m.level),{round:num(m.round),stretch:num(m.stretch)});break;
+      case 'stop':l.stop();break;
+      case 'attention':l.attention();break;
+      case 'state':l.setState(str(m.value,20));break;
+      case 'mood':l.setMood(str(m.value,20));break;
+    }
+  });
+})();
+</script>
+</body>
+</html>

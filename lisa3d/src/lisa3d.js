@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
 const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -82,6 +83,120 @@ function holoMaterial(src, U, kind) {
   return m;
 }
 
+/* ---------- реалистичный вид (не голограмма) ---------- */
+function realMaterial(src, name, opts, U, tex) {
+  if (/suit/i.test(name)) {
+    const m = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(opts.suit || (tex.suit ? '#ffffff' : '#a9afb8')), map: tex.suit || null, metalness: .55, roughness: .36, envMapIntensity: 1.1,
+      emissive: new THREE.Color(tex.glow ? '#ffffff' : '#000000'), emissiveMap: tex.glow || null, emissiveIntensity: opts.glow ?? 2.2
+    });
+    // голубое свечение по краям костюма, как у подсвеченной ткани
+    m.onBeforeCompile = sh => {
+      sh.uniforms.uAccent = { value: U.uTint.value };
+      sh.fragmentShader = 'uniform vec3 uAccent;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>',
+        '#include <emissivemap_fragment>\n totalEmissiveRadiance += uAccent * pow(1.0 - clamp(abs(dot(normalize(normal), normalize(vViewPosition))), 0.0, 1.0), 3.0) * .25;');
+    };
+    m.customProgramCacheKey = () => 'suit';
+    return m;
+  }
+  if (/ponytail/i.test(name)) return new THREE.MeshStandardMaterial({ map: src.map, color: new THREE.Color(opts.hairTint || '#ffffff').multiplyScalar(opts.hairGain ?? 1), roughness: .48, metalness: 0, alphaTest: .3, side: THREE.DoubleSide });
+  if (/eyebrow|eyelash/i.test(name)) return new THREE.MeshStandardMaterial({ color: new THREE.Color(opts.brows || '#2a1c14'), roughness: .85, side: THREE.DoubleSide });
+  if (/^Human$/i.test(name)) return new THREE.MeshStandardMaterial({ map: tex.skin || src.map, roughness: .55, metalness: 0 });
+  if (/high-poly/i.test(name) && tex.eyes) src.map = tex.eyes;   // свой цвет радужки
+  if (src.isMeshStandardMaterial) { src.side = THREE.FrontSide; return src; }
+  return src;
+}
+
+/* ---------- волосы из пряди-карточек (hair.bin, см. tools/hair.py) ---------- */
+function hairTexture() {
+  // 4 варианта пряди по горизонтали: тонкие волоски разной яркости, кончики и края прозрачные
+  const W = 512, H = 512, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d'); let seed = 7;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let c = 0; c < 4; c++) {
+    for (let i = 0; i < 46; i++) {
+      const x0 = c * 128 + 8 + rnd() * 112, sway = (rnd() - .5) * 10, len = .78 + rnd() * .22, v = 150 + rnd() * 105;
+      const gr = g.createLinearGradient(0, 0, 0, H * len);
+      gr.addColorStop(0, `rgba(${v},${v},${v},1)`); gr.addColorStop(.8, `rgba(${v},${v},${v},${.85 + rnd() * .15})`); gr.addColorStop(1, `rgba(${v},${v},${v},0)`);
+      g.strokeStyle = gr; g.lineWidth = 1 + rnd() * 2.2;
+      g.beginPath(); g.moveTo(x0, 0); g.bezierCurveTo(x0 + sway, H * .33, x0 - sway, H * .66, x0 + sway * .5, H * len); g.stroke();
+    }
+  }
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; t.flipY = false;   // v = 0 у корня
+  return t;
+}
+
+function buildHair(buf, opts) {
+  const dv = new DataView(buf);
+  if (dv.getUint32(0) !== 0x48414952) throw new Error('hair: неверный формат');
+  const n = dv.getUint16(6, true), k = dv.getUint16(8, true);
+  const o = [dv.getFloat32(12, true), dv.getFloat32(16, true), dv.getFloat32(20, true)], q = dv.getFloat32(24, true);
+  const P = new Int16Array(buf, 28, n * k * 3), Wb = new Uint8Array(buf, 28 + n * k * 6, n * k * 2), SP = new Uint8Array(buf, 28 + n * k * 8, n * 2);
+  const nv = n * k * 2, pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), uv = new Float32Array(nv * 2), col = new Float32Array(nv * 3);
+  const si = new Uint16Array(nv * 4), sw = new Float32Array(nv * 4), idx = new Uint32Array(n * (k - 1) * 6);
+  const C = new THREE.Vector3(0, 1.665, .05), p = new THREE.Vector3(), a = new THREE.Vector3(), b = new THREE.Vector3(), T = new THREE.Vector3(), R = new THREE.Vector3(), B = new THREE.Vector3();
+  const pt = (s, j, v) => v.set(o[0] + P[(s * k + j) * 3] * q, o[1] + P[(s * k + j) * 3 + 1] * q, o[2] + P[(s * k + j) * 3 + 2] * q);
+  let ii = 0;
+  for (let s = 0; s < n; s++) {
+    const width = SP[s * 2] / 10000, tone = SP[s * 2 + 1] / 255 * 1.2, colU = (s % 4) * .25;
+    for (let j = 0; j < k; j++) {
+      const t = j / (k - 1);
+      pt(s, j, p); pt(s, Math.min(k - 1, j + 1), a); pt(s, Math.max(0, j - 1), b);
+      T.subVectors(a, b).normalize();
+      R.subVectors(p, C); R.y *= .3; R.normalize();
+      B.crossVectors(T, R).normalize();
+      const w = width * (1 - .55 * t * t) * (.6 + .4 * Math.min(1, t * 8)) / 2;
+      const ao = .55 + .45 * Math.min(1, t * 4);                    // у корней темнее: глубина причёски
+      for (let e = 0; e < 2; e++) {
+        const v = (s * k + j) * 2 + e, sg = e ? 1 : -1;
+        pos[v * 3] = p.x + B.x * w * sg; pos[v * 3 + 1] = p.y + B.y * w * sg; pos[v * 3 + 2] = p.z + B.z * w * sg;
+        nor[v * 3] = R.x; nor[v * 3 + 1] = R.y + .3; nor[v * 3 + 2] = R.z;
+        uv[v * 2] = colU + e * .25; uv[v * 2 + 1] = t;
+        col[v * 3] = col[v * 3 + 1] = col[v * 3 + 2] = tone * ao;
+        const wh = Wb[(s * k + j) * 2] / 255, wn = Wb[(s * k + j) * 2 + 1] / 255;
+        si[v * 4] = 0; si[v * 4 + 1] = 1; si[v * 4 + 2] = 2;
+        sw[v * 4] = wh; sw[v * 4 + 1] = wn; sw[v * 4 + 2] = Math.max(0, 1 - wh - wn);
+      }
+      if (j < k - 1) { const v = (s * k + j) * 2; idx.set([v, v + 1, v + 2, v + 1, v + 3, v + 2], ii); ii += 6; }
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); geo.normalizeNormals();
+  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.setAttribute('skinIndex', new THREE.BufferAttribute(si, 4));
+  geo.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4));
+  geo.setIndex(new THREE.BufferAttribute(idx, 1));
+  const mat = new THREE.MeshStandardMaterial({
+    map: hairTexture(), color: new THREE.Color(opts.hairColor || '#5d3d29'), vertexColors: true, roughness: .5, metalness: 0,
+    alphaTest: .5, alphaToCoverage: true, side: THREE.DoubleSide
+  });
+  const mesh = new THREE.SkinnedMesh(geo, mat);
+  mesh.name = 'hair'; mesh.frustumCulled = false; mesh.castShadow = true; mesh.renderOrder = 3;
+  return mesh;
+}
+
+function makeFloor(U, opts) {
+  const g = new THREE.Group();
+  // пол растворяется к краям в цвет фона: без линии горизонта
+  const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+  const cx = cv.getContext('2d'), gr = cx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gr.addColorStop(0, '#fff'); gr.addColorStop(.3, '#fff'); gr.addColorStop(1, '#000');
+  cx.fillStyle = gr; cx.fillRect(0, 0, 128, 128);
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(6, 64), new THREE.MeshStandardMaterial({
+    color: new THREE.Color(opts.floor || '#1c2229'), roughness: .9, metalness: .05, transparent: true, alphaMap: new THREE.CanvasTexture(cv)
+  }));
+  floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; g.add(floor);
+  const ring = new THREE.Mesh(new THREE.CircleGeometry(.9, 96), new THREE.ShaderMaterial({
+    uniforms: U, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: 'varying vec3 vP;void main(){vP=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+    fragmentShader: 'uniform float uTime;uniform vec3 uTint;varying vec3 vP;void main(){float r=length(vP.xy)/.9;float a=smoothstep(.03,.0,abs(r-.97))*.9+smoothstep(.02,.0,abs(r-.8))*.35*(.6+.4*sin(uTime*1.3));gl_FragColor=vec4(uTint,a);}'
+  }));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = .003; g.add(ring);
+  return { group: g, waves: [] };
+}
+
 /* ---------- сцена платформы ---------- */
 function makeStage(U) {
   const g = new THREE.Group();
@@ -139,6 +254,11 @@ export async function create(container, opts = {}) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, opts.maxDpr || 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.setClearColor(bg, 1);
+  const real = opts.style === 'real';
+  if (real) {
+    renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = opts.exposure ?? 1.05;
+    renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
+  }
   const canvas = renderer.domElement;
   canvas.style.cssText = 'display:block;width:100%;height:100%';
   canvas.setAttribute('role', 'img'); canvas.setAttribute('aria-label', opts.label || 'Голограмма ассистента');
@@ -146,18 +266,35 @@ export async function create(container, opts = {}) {
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(bg, 6, 14);
+  if (real) {
+    const pm = new THREE.PMREMGenerator(renderer);
+    scene.environment = pm.fromScene(new RoomEnvironment(), .04).texture; scene.environmentIntensity = .55;
+    scene.add(new THREE.HemisphereLight(0xd9e8ff, 0x1c2026, .55));
+    const key = new THREE.DirectionalLight(0xfff1e6, 2.2); key.position.set(1.6, 3.2, 2.6); key.castShadow = true;
+    key.shadow.mapSize.set(1024, 1024); key.shadow.bias = -.0005; key.shadow.normalBias = .02;
+    Object.assign(key.shadow.camera, { left: -1.6, right: 1.6, top: 2.2, bottom: -.4, near: .5, far: 9 });
+    scene.add(key);
+    const rim = new THREE.DirectionalLight(new THREE.Color(opts.accent || '#45dcff'), 1.1); rim.position.set(-2.2, 2.4, -2.5); scene.add(rim);
+    const fill = new THREE.DirectionalLight(0xbcd4ff, .5); fill.position.set(-2, 1.5, 2); scene.add(fill);
+  }
   const camera = new THREE.PerspectiveCamera(28, 1, 0.05, 40);
   const U = {
     uTime: { value: 0 }, uFlick: { value: 1 }, uOpacity: { value: opts.opacity ?? .86 },
-    uTint: { value: new THREE.Color(opts.tint || '#5aa8ff') }, uHair: { value: new THREE.Color(opts.hair || '#8f7bff') }, uRim: { value: new THREE.Color(opts.rim || '#9fe0ff') }, uDeep: { value: new THREE.Color(opts.deep || '#0b1b4a') }
+    uTint: { value: new THREE.Color(opts.tint || opts.accent || '#5aa8ff') }, uHair: { value: new THREE.Color(opts.hair || '#8f7bff') }, uRim: { value: new THREE.Color(opts.rim || '#9fe0ff') }, uDeep: { value: new THREE.Color(opts.deep || '#0b1b4a') }
   };
 
   // данные
   const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
-  const [gltf, meta, bin] = await Promise.all([
+  // свои текстуры костюма, свечения, кожи и глаз (как у glTF: без переворота, sRGB)
+  const texture = src => src ? new THREE.TextureLoader().loadAsync(src).then(t => {
+    t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy()); return t;
+  }) : null;
+  const [gltf, meta, bin, suitMap, suitGlow, skinMap, eyeMap, hairBuf] = await Promise.all([
     opts.avatarData instanceof ArrayBuffer ? loader.parseAsync(opts.avatarData, '') : loader.loadAsync(opts.avatar || 'avatar.glb'),
     typeof opts.motionsMeta === 'object' ? opts.motionsMeta : fetch(opts.motionsMeta || 'motions.json').then(r => r.json()),
-    opts.motionsData instanceof ArrayBuffer ? opts.motionsData : fetch(opts.motions || 'motions.bin').then(r => r.arrayBuffer())
+    opts.motionsData instanceof ArrayBuffer ? opts.motionsData : fetch(opts.motions || 'motions.bin').then(r => r.arrayBuffer()),
+    real && texture(opts.suitMap), real && texture(opts.suitGlow), real && texture(opts.skinMap), real && texture(opts.eyeMap),
+    opts.hairData instanceof ArrayBuffer ? opts.hairData : opts.hairFile ? fetch(opts.hairFile).then(r => r.arrayBuffer()) : null
   ]);
   const avatar = gltf.scene;
   scene.add(avatar);
@@ -165,17 +302,28 @@ export async function create(container, opts = {}) {
   avatar.traverse(o => {
     if (o.isMesh || o.isSkinnedMesh) {
       const hair = /eyebrow|eyelash|ponytail/i.test(o.name);
-      o.material = holoMaterial(o.material, U, hair ? 1 : 0);
+      if (real) { o.material = realMaterial(o.material, o.name, opts, U, { suit: suitMap, glow: suitGlow, skin: skinMap, eyes: eyeMap }); o.castShadow = true; }
+      else o.material = holoMaterial(o.material, U, hair ? 1 : 0);
+      if (real && opts.hideBrows && /eyebrow/i.test(o.name)) o.visible = false;   // брови уже нарисованы на коже лица
       o.frustumCulled = false;
       o.renderOrder = hair ? 3 : /teeth|tongue|high-poly/i.test(o.name) ? 2 : /suit/i.test(o.name) ? 1 : 0;   // тело пишет глубину первым: зубы и глаза видны только через открытый рот и веки
       if (o.morphTargetDictionary) morphMeshes.push(o);
     }
   });
-  const stage = makeStage(U); scene.add(stage.group);
+  const stage = real ? makeFloor(U, opts) : makeStage(U); scene.add(stage.group);
 
   const bones = {};
   avatar.traverse(o => { if (o.isBone) bones[o.name] = o; });
   const restQ = {}; for (const n in bones) restQ[n] = bones[n].quaternion.clone();
+
+  // свои волосы вместо хвоста: привязка к голове, шее и груди в позе покоя
+  if (hairBuf) {
+    const hair = buildHair(hairBuf, opts);
+    if (!real) hair.material = holoMaterial(hair.material, U, 1);
+    avatar.add(hair); avatar.updateMatrixWorld(true);
+    hair.bind(new THREE.Skeleton([bones.Head, bones.Neck, bones.Spine2]));
+    avatar.traverse(o => { if (o.isMesh && /ponytail/i.test(o.name)) o.visible = false; });
+  }
 
   // пальцы: расслабленный изгиб (в записях их движения нет)
   avatar.updateMatrixWorld(true);
@@ -494,7 +642,8 @@ export async function create(container, opts = {}) {
     const halfV = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
     const needV = (opts.frameHeight || 2.35) / 2 / halfV, needH = (opts.frameWidth || 1.9) / 2 / (halfV * camera.aspect);
     const dist = Math.max(needV, needH);
-    camera.position.set(0, (opts.cameraY ?? 1.02), dist);
+    const va = THREE.MathUtils.degToRad(opts.viewAngle || 0);   // взгляд сбоку: поворот камеры вокруг фигуры
+    camera.position.set(Math.sin(va) * dist, (opts.cameraY ?? 1.02), Math.cos(va) * dist);
     camera.lookAt(0, opts.lookY ?? 1.0, 0);
     camera.updateProjectionMatrix();
   }
@@ -520,7 +669,7 @@ export async function create(container, opts = {}) {
     const now = performance.now(), t = now / 1000;
     U.uTime.value = t;
     // мерцание и редкий глитч
-    if (!calm && Math.random() < dt * .08) glitchT = .18;
+    if (!calm && !real && Math.random() < dt * .08) glitchT = .18;
     glitchT = Math.max(0, glitchT - dt);
     U.uFlick.value = calm ? 1 : (glitchT > 0 ? .55 + .45 * Math.random() : .96 + .04 * Math.sin(t * 9.1) * Math.sin(t * 3.7));
     // переход к следующему клипу заранее, чтобы стык был плавным

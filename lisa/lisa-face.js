@@ -16,26 +16,28 @@ void main(){vUv=aUv;vec2 n=aPos/uRes;gl_Position=vec4(n.x*2.-1.,1.-n.y*2.,0.,1.)
 const FS_TEX = `precision mediump float;uniform sampler2D uTex;uniform float uAlpha;varying vec2 vUv;
 void main(){gl_FragColor=vec4(texture2D(uTex,vUv).rgb,uAlpha);}`;
 
-// vUv.x: -1..1 поперёк рта, vUv.y: 0 у верхней губы .. 1 у нижней; размеры в пикселях портрета
-const FS_MOUTH = `precision mediump float;uniform float uOpenH,uAlpha,uRound;varying vec2 vUv;
+// vUv.x: -1..1 поперёк рта, vUv.y: 0 у верхней губы .. 1 у нижней.
+// Размеры в пикселях эталонного рта (полуширина 26.5 px), uK приводит их к рту конкретного портрета; цвета задаёт палитра.
+const FS_MOUTH = `precision mediump float;uniform float uOpenH,uAlpha,uRound,uK;
+uniform vec3 uCavA,uCavB,uTongA,uTongB,uTeeth,uGum;varying vec2 vUv;
 void main(){
   float u=vUv.x,v=vUv.y,au=abs(u);
-  float H=max(uOpenH,.5),py=v*H,pb=(1.-v)*H;
-  vec3 col=mix(vec3(.16,.07,.24),vec3(.03,.014,.09),.55*smoothstep(0.,.9,v)+.45*(1.-au));
+  float H=max(uOpenH,.5)/uK,py=v*H,pb=(1.-v)*H;
+  vec3 col=mix(uCavA,uCavB,.55*smoothstep(0.,.9,v)+.45*(1.-au));
   // язык
   float tTop=H*(.56-.16*(1.-au*au));
   float tg=smoothstep(tTop-1.2,tTop+1.2,py)*(1.-smoothstep(.45,.9,au))*smoothstep(5.,10.,H);
-  vec3 tc=mix(vec3(.42,.18,.42),vec3(.56,.30,.54),(1.-au)*.6);
+  vec3 tc=mix(uTongA,uTongB,(1.-au)*.6);
   col=mix(col,tc*(.45+.55*smoothstep(H,H*.35,py)),tg*.9);
-  // верхние зубы: светятся тем же холодным светом, что и кожа, в тени у дёсен и по краям
+  // верхние зубы: в тени у дёсен и по краям
   float open=1.-.85*uRound;
   float tu=5.4*(1.-.2*au*au);
   float tf=(1.-smoothstep(tu-1.1,tu+1.3,py))*open;
   float gx=abs(fract(u/.286+.5)-.5)*.286;
   float groove=1.-smoothstep(0.,.03,gx);
-  vec3 tb=vec3(.60,.68,.88)*(1.-.75*smoothstep(.5,.95,au))*(.55+.45*smoothstep(0.,4.2,py))*(1.-.5*smoothstep(tu-2.,tu+.6,py));
+  vec3 tb=uTeeth*(1.-.75*smoothstep(.5,.95,au))*(.55+.45*smoothstep(0.,4.2,py))*(1.-.5*smoothstep(tu-2.,tu+.6,py));
   tb*=1.-.13*groove;
-  tb=mix(vec3(.40,.20,.46),tb,smoothstep(.1,1.6,py));
+  tb=mix(uGum,tb,smoothstep(.1,1.6,py));
   col=mix(col,tb,tf*.92);
   // нижние зубы: глубже в тени
   float bu=3.0*(1.-.15*au*au);
@@ -46,6 +48,12 @@ void main(){
   col*=1.-.6*smoothstep(.6,1.,au);
   gl_FragColor=vec4(col,uAlpha);
 }`;
+
+// палитры полости рта: голограмма (холодный свет) и обычное фото
+const PALETTES = {
+  holo: { cavA: [.16, .07, .24], cavB: [.03, .014, .09], tongA: [.42, .18, .42], tongB: [.56, .30, .54], teeth: [.60, .68, .88], gum: [.40, .20, .46] },
+  natural: { cavA: [.30, .09, .09], cavB: [.06, .015, .02], tongA: [.60, .25, .27], tongB: [.80, .42, .42], teeth: [.92, .88, .83], gum: [.64, .31, .33] }
+};
 
 /* ---------- геометрия и веса ---------- */
 function buildRig(F) {
@@ -232,9 +240,13 @@ function start(canvas, opts, F, img) {
     gl.attachShader(p, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs));
     gl.bindAttribLocation(p, 0, 'aPos'); gl.bindAttribLocation(p, 1, 'aUv'); gl.linkProgram(p);
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
-    return { p, res: gl.getUniformLocation(p, 'uRes'), alpha: gl.getUniformLocation(p, 'uAlpha'), open: gl.getUniformLocation(p, 'uOpenH'), round: gl.getUniformLocation(p, 'uRound') };
+    return { p, res: gl.getUniformLocation(p, 'uRes'), alpha: gl.getUniformLocation(p, 'uAlpha'), open: gl.getUniformLocation(p, 'uOpenH'), round: gl.getUniformLocation(p, 'uRound'), loc: n => gl.getUniformLocation(p, n) };
   };
   const pT = prog(FS_TEX), pM = prog(FS_MOUTH);
+  const pal = typeof opts.palette === 'object' ? Object.assign({}, PALETTES.holo, opts.palette) : PALETTES[opts.palette] || PALETTES.holo;
+  gl.useProgram(pM.p);
+  gl.uniform1f(pM.loc('uK'), rig.mw / 26.5);
+  [['uCavA', 'cavA'], ['uCavB', 'cavB'], ['uTongA', 'tongA'], ['uTongB', 'tongB'], ['uTeeth', 'teeth'], ['uGum', 'gum']].forEach(([u, k]) => gl.uniform3fv(pM.loc(u), pal[k]));
   gl.enableVertexAttribArray(0); gl.enableVertexAttribArray(1);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 

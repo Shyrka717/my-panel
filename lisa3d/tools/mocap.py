@@ -107,11 +107,12 @@ MAP = {  # цель <- источник
     "RightUpLeg": "RightUpLeg", "RightLeg": "RightLeg", "RightFoot": "RightFoot", "RightToeBase": "RightToeBase",
 }
 BONES = list(MAP.keys())
-# выравнивание позы покоя: (цель: точка направления), (источник: точка направления)
+# выравнивание позы покоя: (цель: точка направления), (источник: точка направления).
+# Только конечности: Т-поза записи против А-позы модели. Позвоночник, шея и ключицы остаются как у модели:
+# у скелета CMU шея отклонена назад, а ключицы подняты, и копирование этого давало сутулые плечи и прогиб.
 DIR = {
-    "Spine": ("Spine1", "Spine"), "Spine1": ("Spine2", "Spine1"), "Spine2": ("Neck", "Neck1"), "Neck": ("Head", "Head"),
-    "LeftShoulder": ("LeftArm", "LeftArm"), "LeftArm": ("LeftForeArm", "LeftForeArm"), "LeftForeArm": ("LeftHand", "LeftHand"),
-    "RightShoulder": ("RightArm", "RightArm"), "RightArm": ("RightForeArm", "RightForeArm"), "RightForeArm": ("RightHand", "RightHand"),
+    "LeftArm": ("LeftForeArm", "LeftForeArm"), "LeftForeArm": ("LeftHand", "LeftHand"),
+    "RightArm": ("RightForeArm", "RightForeArm"), "RightForeArm": ("RightHand", "RightHand"),
     "LeftUpLeg": ("LeftLeg", "LeftLeg"), "LeftLeg": ("LeftFoot", "LeftFoot"), "LeftFoot": ("LeftToeBase", "LeftToeBase"),
     "RightUpLeg": ("RightLeg", "RightLeg"), "RightLeg": ("RightFoot", "RightFoot"), "RightFoot": ("RightToeBase", "RightToeBase"),
 }
@@ -145,8 +146,7 @@ class Retarget:
         Fs = frame_from(S["Spine"] - S["Hips"], S["LeftUpLeg"] - S["RightUpLeg"])
         A = R.from_matrix(Fs @ Ft.T)
         q[ix["Hips"]] = (A * W[ix["Hips"]]).as_quat()
-        order = ["Spine", "Spine1", "Spine2", "Neck", "LeftShoulder", "LeftArm", "LeftForeArm", "RightShoulder", "RightArm", "RightForeArm",
-                 "LeftUpLeg", "LeftLeg", "LeftFoot", "RightUpLeg", "RightLeg", "RightFoot"]
+        order = ["LeftArm", "LeftForeArm", "RightArm", "RightForeArm", "LeftUpLeg", "LeftLeg", "LeftFoot", "RightUpLeg", "RightLeg", "RightFoot"]
         for bn in order:
             W, P = tgt_fk(sk, q)
             tc, sc = DIR[bn]

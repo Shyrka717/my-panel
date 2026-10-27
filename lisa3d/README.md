@@ -70,4 +70,6 @@ node build.mjs ../src/lisa3d.js ../lisa3d.js
 python3 build-single.py                  # -> ../dist
 ```
 
+Реалистичный вид (`style: 'real'`), свой костюм, лицо с фото и волосы: `avatar2/README.md`.
+
 Лицензии компонентов: `LICENSES.md`.

@@ -38,7 +38,7 @@ CLIPS = [
     ("idle4", "137_23", None, "dance", "idle", ""),
     ("idle5", "137_37", None, "dance", "idle", ""),
     # передвижение
-    ("walk1", "137_24", None, "inplace", "walk", ""),
+    ("walk1", "35_01", None, "inplace", "walk", ""),
     ("walk2", "91_29", None, "inplace", "walk", ""),
     ("run1", "35_17", None, "inplace", "run", ""),
     ("run2", "16_35", None, "inplace", "run", ""),
@@ -68,6 +68,10 @@ CLIPS = [
 ]
 
 FPS = 30
+# жёсткость корпуса: доля изгиба позвоночника, шеи и ключиц из записи (1 = как в записи).
+# Записи CMU гнутся сильнее, чем выглядит естественно на другой фигуре; подъём с пола оставляем как есть.
+DAMP = {"Spine": .8, "Spine1": .75, "Spine2": .75, "Neck": .8, "LeftShoulder": .6, "RightShoulder": .6}
+DAMP_SKIP = ("sit", "sitidle", "standup", "lieidle", "getup", "liedown")
 LIE_YAW = 80
 LIE_SHIFT = -0.08   # таз чуть левее центра: тело целиком в кадре
 LIE_O = [None]
@@ -120,6 +124,10 @@ for name, src, span, root, group, title in CLIPS:
     if span: a, bnd = int(span[0] / dt), int(span[1] / dt)
     else: a, bnd = autotrim(hips, Q)
     hips = hips[a:bnd].copy(); Q = Q[a:bnd].copy()
+    if group not in DAMP_SKIP:
+        for bn, f in DAMP.items():
+            k = BONES.index(bn); rest = R.from_quat(rt.qref[ix[bn]])
+            Q[:, k] = (rest * R.from_rotvec((rest.inv() * R.from_quat(Q[:, k])).as_rotvec() * f)).as_quat()
     if rev: hips = hips[::-1].copy(); Q = Q[::-1].copy()
     # разворот к зрителю и центр: по первому кадру, у связок (сесть/лечь) по общему опорному кадру
     fam = FAMILY.get(src)
