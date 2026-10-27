@@ -13,7 +13,8 @@ const pick = a => a[Math.floor(Math.random() * a.length)];
 const DANCE_STYLES = [
   [/сальс/, 'salsa'], [/чарльстон/, 'charleston'], [/линди/, 'lindy'], [/индий/, 'indian'],
   [/современ|модерн|балет|пируэт/, 'modern'], [/русск|присядк|вприсядк/, 'russian'], [/лунн|джексон/, 'moonwalk'],
-  [/твист/, 'twist'], [/макарен/, 'macarena'], [/утят|утк|цыпл/, 'chicken']
+  [/твист/, 'twist'], [/макарен/, 'macarena'], [/утят|утк|цыпл/, 'chicken'],
+  [/эрот|сексуал|секси|чувствен|страст|соблазн|стрип/, 'erotic']
 ];
 const COMMANDS = [
   [/(стоп|хватит|останов|замри|перестань|прекрати)/, 'stop'],
@@ -459,7 +460,8 @@ export async function create(container, opts = {}) {
 
   function nextFor(b) {
     if (b === 'dance') {
-      const pool = style ? danceClips.filter(n => styleOf(n) === style) : danceClips;
+      let pool = style ? danceClips.filter(n => styleOf(n) === style) : danceClips;
+      if (!pool.length) pool = danceClips;                       // такого стиля в наборе нет: любой из имеющихся
       let n = pick(pool); if (pool.length > 1) while (n === lastDance) n = pick(pool);
       lastDance = n; return n;
     }

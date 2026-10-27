@@ -7,13 +7,15 @@ root = pathlib.Path(__file__).resolve().parent.parent
 repo = root.parent
 b64 = lambda p: base64.b64encode(p.read_bytes()).decode()
 DECODE = "function d(s){var b=atob(s),u=new Uint8Array(b.length);for(var i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u}"
-base = ("window.__LISA3D_AVATAR_BUF=d('%s').buffer;window.__LISA3D_MOTIONS_BUF=d('%s').buffer;window.__LISA3D_META=%s;"
-        % (b64(root / "avatar.glb"), b64(root / "motions.bin"), (root / "motions.json").read_text()))
+motions = lambda d: ("window.__LISA3D_MOTIONS_BUF=d('%s').buffer;window.__LISA3D_META=%s;"
+                     % (b64(d / "motions.bin"), (d / "motions.json").read_text()))
+base = "window.__LISA3D_AVATAR_BUF=d('%s').buffer;" % b64(root / "avatar.glb")
 engine = "<script>\n" + (root / "lisa3d.js").read_text() + "\n</script>"
 
 
 def build(folder, pages, extra=""):
-    boot = "<script>(function(){" + DECODE + base + extra + "})();</script>\n"
+    # движения: свои у папки (например, другой набор танцев), иначе общие из lisa3d
+    boot = "<script>(function(){" + DECODE + base + motions(folder if (folder / "motions.bin").exists() else root) + extra + "})();</script>\n"
     out = folder / "dist"; out.mkdir(exist_ok=True)
     for src, dst in pages:
         html = (folder / src).read_text()

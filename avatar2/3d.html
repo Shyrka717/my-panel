@@ -22,8 +22,8 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg)}
   const toHost=m=>{try{if(window.parent!==window)window.parent.postMessage(Object.assign({lisa:true},m),'*')}catch(e){/* хост недоступен */}};
   Lisa3D.create(document.getElementById('stage'),{
     avatar:'../lisa3d/avatar.glb',avatarData:window.__LISA3D_AVATAR_BUF,
-    motions:'../lisa3d/motions.bin',motionsData:window.__LISA3D_MOTIONS_BUF,
-    motionsMeta:window.__LISA3D_META||'../lisa3d/motions.json',
+    motions:'motions.bin',motionsData:window.__LISA3D_MOTIONS_BUF,
+    motionsMeta:window.__LISA3D_META||'motions.json',
     style:'real',background:bg,floor:'#20272f',accent:'#45dcff',label:'Ассистент',
     suitMap:window.__SUIT_MAP||'suit.webp',suitGlow:window.__SUIT_GLOW||'suit-glow.webp',skinMap:window.__SKIN_MAP||'skin.webp',eyeMap:window.__EYE_MAP||'eyes.webp',hideBrows:true,
     hairFile:'hair.bin',hairData:window.__HAIR_BUF,hairColor:'#6e4632',
