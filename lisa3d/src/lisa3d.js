@@ -86,6 +86,7 @@ function holoMaterial(src, U, kind) {
 
 /* ---------- реалистичный вид (не голограмма) ---------- */
 function realMaterial(src, name, opts, U, tex) {
+  if (/suit/i.test(name) && opts.satin) return satinMaterial(opts, tex.suit, tex.suitPbr);
   if (/suit/i.test(name)) {
     const m = new THREE.MeshStandardMaterial({
       color: new THREE.Color(opts.suit || (tex.suit ? '#ffffff' : '#a9afb8')), map: tex.suit || null, metalness: .55, roughness: .36, envMapIntensity: 1.1,
@@ -102,6 +103,7 @@ function realMaterial(src, name, opts, U, tex) {
   }
   if (/ponytail/i.test(name)) return new THREE.MeshStandardMaterial({ map: src.map, color: new THREE.Color(opts.hairTint || '#ffffff').multiplyScalar(opts.hairGain ?? 1), roughness: .48, metalness: 0, alphaTest: .3, side: THREE.DoubleSide });
   if (/eyebrow|eyelash/i.test(name)) return new THREE.MeshStandardMaterial({ color: new THREE.Color(opts.brows || '#2a1c14'), roughness: .85, side: THREE.DoubleSide });
+  if (/^Human$/i.test(name) && tex.skinPbr) return new THREE.MeshPhysicalMaterial({ map: tex.skin || src.map, roughnessMap: tex.skinPbr, clearcoatMap: tex.skinPbr, roughness: 1, metalness: 0, clearcoat: 1, clearcoatRoughness: .12 });
   if (/^Human$/i.test(name)) return new THREE.MeshStandardMaterial({ map: tex.skin || src.map, roughness: .55, metalness: 0 });
   if (/high-poly/i.test(name) && tex.eyes) src.map = tex.eyes;   // свой цвет радужки
   if (src.isMeshStandardMaterial) { src.side = THREE.FrontSide; return src; }
@@ -238,6 +240,174 @@ function hairPhysics(hair, head) {
   };
 }
 
+/* ---------- наряд: юбка, посадка платья по телу, каблуки ---------- */
+function satinMaterial(opts, map, pbr) {
+  // чёрный атлас с лаком: R карты pbr — доля лака, G — шероховатость
+  return new THREE.MeshPhysicalMaterial({
+    map: map || null, color: new THREE.Color(map ? '#ffffff' : (opts.dressColor || '#141418')),
+    roughnessMap: pbr || null, clearcoatMap: pbr || null, roughness: pbr ? 1 : .32, metalness: 0,
+    clearcoat: pbr ? 1 : .55, clearcoatRoughness: .2, sheen: .5, sheenRoughness: .4, sheenColor: new THREE.Color('#2c2c34')
+  });
+}
+
+function buildSkirt(buf, opts) {
+  const dv = new DataView(buf);
+  if (dv.getUint32(0) !== 0x534b5254) throw new Error('skirt: неверный формат');
+  const nr = dv.getUint16(6, true), m = dv.getUint16(8, true);
+  const o = [dv.getFloat32(12, true), dv.getFloat32(16, true), dv.getFloat32(20, true)], q = dv.getFloat32(24, true);
+  const P = new Int16Array(buf, 28, nr * m * 3);
+  const nv = nr * (m + 1), pos = new Float32Array(nv * 3), uv = new Float32Array(nv * 2), si = new Uint16Array(nv * 4), sw = new Float32Array(nv * 4);
+  const idx = [];
+  for (let j = 0; j < nr; j++) for (let k = 0; k <= m; k++) {
+    const kk = k % m, v = j * (m + 1) + k, src = (j * m + kk) * 3;
+    const x = o[0] + P[src] * q, y = o[1] + P[src + 1] * q, z = o[2] + P[src + 2] * q;
+    pos.set([x, y, z], v * 3); uv.set([k / m, j / (nr - 1)], v * 2);
+    // верх держится за таз, ниже ткань делят бёдра: перед и зад посередине тянутся между ногами
+    const wh = clamp((y - .86) / .12, 0, 1), wl = (1 - wh) * clamp((x + .04) / .08, 0, 1);
+    si.set([0, 1, 2, 0], v * 4); sw.set([wh, wl, 1 - wh - wl, 0], v * 4);
+    if (j < nr - 1 && k < m) { const a = v, b = v + 1, c = v + m + 1, d = v + m + 2; idx.push(a, c, b, b, c, d); }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  geo.setAttribute('skinIndex', new THREE.BufferAttribute(si, 4));
+  geo.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4));
+  geo.setIndex(idx); geo.computeVertexNormals();
+  const mat = satinMaterial(opts, null, null); mat.side = THREE.DoubleSide;
+  // юбка не уходит в бёдра: после скиннинга точки выталкиваются из капсул бёдер (тазобедренный сустав — колено)
+  const uThA = { value: [new THREE.Vector3(), new THREE.Vector3()] }, uThB = { value: [new THREE.Vector3(), new THREE.Vector3()] };
+  mat.onBeforeCompile = sh => {
+    sh.uniforms.uThA = uThA; sh.uniforms.uThB = uThB;
+    sh.vertexShader = 'uniform vec3 uThA[2];\nuniform vec3 uThB[2];\n' + sh.vertexShader.replace('#include <skinning_vertex>', `#include <skinning_vertex>
+      // ткань не тянется за коленями дальше, чем позволяет длина: подол «задирается», а не растягивается полотном
+      vec3 hipsOnly = (bindMatrixInverse * boneMatX * skinVertex).xyz, dd = transformed - hipsOnly;
+      float lim = mix(.03, .16, clamp((.99 - position.y) / .33, 0., 1.)), ld = length(dd);
+      if (ld > lim) transformed = hipsOnly + dd * (lim / ld);
+      for (int i = 0; i < 2; i++) {
+        vec3 ab = uThB[i] - uThA[i];
+        float t = dot(transformed - uThA[i], ab) / dot(ab, ab);
+        if (t < .08 || t > 1.) continue;                               // выше сустава бедра не толкаем: там таз
+        vec3 c = uThA[i] + ab * t, d = transformed - c;
+        float r = mix(.1, .068, t), l = length(d);
+        if (l < r && l > 1e-4) transformed = c + d * (r / l);
+      }`);
+  };
+  mat.customProgramCacheKey = () => 'skirt';
+  const mesh = new THREE.SkinnedMesh(geo, mat);
+  mesh.name = 'skirt'; mesh.frustumCulled = false; mesh.castShadow = true; mesh.renderOrder = 1;
+  mesh.userData.thighs = { uThA, uThB };
+  return mesh;
+}
+
+// посадка платья: рукава футболки подтягиваются к форме руки (там нарисована кожа), в вырезе — ложбинка
+function fitDress(suit, bones) {
+  const g = suit.geometry, P = g.attributes.position, N = g.attributes.normal, UV = g.attributes.uv;
+  suit.updateMatrixWorld(true);
+  const w = i => suit.getVertexPosition(i, new THREE.Vector3()).applyMatrix4(suit.matrixWorld);
+  const p = i => new THREE.Vector3(P.getX(i), P.getY(i), P.getZ(i));
+  // сжатие сетки — равномерный масштаб и сдвиг: мир = s * p + b
+  const i1 = 0, i2 = Math.floor(P.count / 2), i3 = P.count - 1;
+  const s = w(i1).distanceTo(w(i2)) / p(i1).distanceTo(p(i2)), b = w(i1).sub(p(i1).multiplyScalar(s));
+  if (w(i3).distanceTo(p(i3).multiplyScalar(s).add(b)) > .002) return;   // не та сетка: не трогаем
+  const arm = side => [bones[side + 'Arm'].getWorldPosition(new THREE.Vector3()), bones[side + 'ForeArm'].getWorldPosition(new THREE.Vector3())];
+  const L = arm('Left'), R = arm('Right'), v = new THREE.Vector3(), r = new THREE.Vector3(), n = new THREE.Vector3();
+  const lerpT = (t, ts, rs) => { if (t <= ts[0]) return rs[0]; for (let k = 1; k < ts.length; k++) if (t <= ts[k]) return rs[k - 1] + (rs[k] - rs[k - 1]) * (t - ts[k - 1]) / (ts[k] - ts[k - 1]); return rs[rs.length - 1]; };
+  for (let i = 0; i < P.count; i++) {
+    const u = UV.getX(i), vv = UV.getY(i);
+    const pw = p(i).multiplyScalar(s).add(b);
+    if (u >= .74 && vv >= .55) {                                       // рукав
+      const [S, E] = pw.x > 0 ? L : R;
+      v.subVectors(E, S); const t = r.subVectors(pw, S).dot(v) / v.lengthSq();
+      r.sub(v.clone().multiplyScalar(t)); const len = r.length();
+      // у плеча рука модели удалена — рукав становится плечом; ниже есть настоящая рука — рукав прячется внутрь неё
+      const target = lerpT(t, [0, .2, .26, .33, .5], [.06, .055, .05, .036, .035]);
+      const f = clamp(t / .25, 0, 1); const nl = len - f * Math.max(0, len - target);
+      if (len > 1e-5) pw.copy(S).addScaledVector(v, t).addScaledVector(r, nl / len);
+    } else if (vv < .43 && pw.z > .1 && pw.y > 1.2 && pw.y < 1.37) {    // ложбинка между грудью
+      const bump = clamp((pw.y - 1.205) / .035, 0, 1) * (1 - clamp((pw.y - 1.30) / .06, 0, 1));
+      const e = Math.exp(-((pw.x / .016) ** 2)) * bump, D = .022;
+      pw.z -= D * e;
+      n.set(N.getX(i), N.getY(i), N.getZ(i)); n.x += -2 * pw.x * D * e / (.016 * .016) * .5; n.normalize();
+      N.setXYZ(i, n.x, n.y, n.z);
+    } else continue;
+    P.setXYZ(i, (pw.x - b.x) / s, (pw.y - b.y) / s, (pw.z - b.z) / s);
+  }
+  P.needsUpdate = true; N.needsUpdate = true;
+}
+
+// туфли-лодочки (shoes.bin, см. tools/shoes.py): задняя часть держится за стопу, мыс — за пальцы
+function buildShoes(buf) {
+  const dv = new DataView(buf);
+  if (dv.getUint32(0) !== 0x53484f45) throw new Error('shoes: неверный формат');
+  const n = dv.getUint16(6, true), m = dv.getUint16(8, true);
+  const o = [dv.getFloat32(12, true), dv.getFloat32(16, true), dv.getFloat32(20, true)], q = dv.getFloat32(24, true), ball = dv.getFloat32(28, true);
+  const mat = new THREE.MeshPhysicalMaterial({ color: '#09090b', roughness: .14, metalness: 0, clearcoat: 1, clearcoatRoughness: .08, side: THREE.DoubleSide });
+  const out = [];
+  let off = 32;
+  for (let f = 0; f < 2; f++) {
+    const heel = new THREE.Vector3(dv.getFloat32(off, true), dv.getFloat32(off + 4, true), dv.getFloat32(off + 8, true)); off += 12;
+    const P = new Int16Array(buf.slice(off, off + n * m * 6)); off += n * m * 6;
+    const pos = new Float32Array(n * m * 3), si = new Uint16Array(n * m * 4), sw = new Float32Array(n * m * 4), idx = [];
+    for (let i = 0; i < n * m; i++) {
+      const z = o[2] + P[i * 3 + 2] * q;
+      pos.set([o[0] + P[i * 3] * q, o[1] + P[i * 3 + 1] * q, z], i * 3);
+      const wt = clamp((z - ball + .012) / .024, 0, 1);
+      si.set([0, 1, 0, 0], i * 4); sw.set([1 - wt, wt, 0, 0], i * 4);
+    }
+    for (let j = 0; j < n - 1; j++) for (let k = 0; k < m - 1; k++) { const a = j * m + k; idx.push(a, a + m, a + 1, a + 1, a + m, a + m + 1); }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('skinIndex', new THREE.BufferAttribute(si, 4));
+    geo.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4));
+    geo.setIndex(idx); geo.computeVertexNormals();
+    const mesh = new THREE.SkinnedMesh(geo, mat);
+    mesh.name = 'shoe'; mesh.frustumCulled = false; mesh.castShadow = true;
+    out.push({ mesh, heel, side: f ? 'Right' : 'Left' });
+  }
+  return out;
+}
+
+// каблуки: стопа на подъёме (носок вниз), тело поднято так, что подушечка стопы остаётся на полу, шпильки под пятками
+function makeHeels(avatar, bones, opts, heelPoints) {
+  const th = typeof opts.heels === 'number' ? opts.heels : .5;
+  avatar.updateMatrixWorld(true);
+  const X = new THREE.Vector3(1, 0, 0), out = { H: 0, feet: [] };
+  const mat = new THREE.MeshPhysicalMaterial({ color: '#08080a', roughness: .15, clearcoat: 1, clearcoatRoughness: .1 });
+  for (const side of ['Left', 'Right']) {
+    const foot = bones[side + 'Foot'], toe = bones[side + 'ToeBase']; if (!foot || !toe) continue;
+    const fq = foot.getWorldQuaternion(new THREE.Quaternion()), tq = toe.getWorldQuaternion(new THREE.Quaternion());
+    const qf = new THREE.Quaternion().setFromAxisAngle(X.clone().applyQuaternion(fq.clone().invert()), th);
+    const qt = new THREE.Quaternion().setFromAxisAngle(X.clone().applyQuaternion(tq.clone().invert()), -th * .85);
+    const ank = foot.getWorldPosition(new THREE.Vector3()), tp = toe.getWorldPosition(new THREE.Vector3());
+    const Rw = new THREE.Quaternion().setFromAxisAngle(X, th);
+    const drop = tp.clone().sub(ank).applyQuaternion(Rw).y - tp.clone().sub(ank).y;
+    out.H = Math.max(out.H, -drop);
+    out.feet.push({ foot, toe, qf, qt, ank, Rw, hp: heelPoints && heelPoints[side] });
+  }
+  // шпилька: от низа пятки до пола в позе на каблуке, затем в систему кости стопы
+  for (const f of out.feet) {
+    // низ пятки туфли (или оценка по суставу), повёрнутый вместе со стопой и поднятый на высоту каблука
+    const hp0 = f.hp ? f.hp.clone() : f.ank.clone().add(new THREE.Vector3(0, -.07, -.035));
+    const heel = hp0.clone().sub(f.ank).applyQuaternion(f.Rw).add(f.ank).add(new THREE.Vector3(0, out.H, 0));
+    const len = heel.y - hp0.y;
+    const geo = new THREE.CylinderGeometry(.009, .0035, len, 12); geo.translate(0, -len / 2, 0);
+    const mesh = new THREE.Mesh(geo, mat); mesh.castShadow = true;
+    const fw = new THREE.Matrix4().compose(f.ank.clone().add(new THREE.Vector3(0, out.H, 0)), f.foot.getWorldQuaternion(new THREE.Quaternion()).multiply(f.qf), new THREE.Vector3(1, 1, 1));
+    const local = new THREE.Matrix4().copy(fw).invert().multiply(new THREE.Matrix4().makeTranslation(heel.x, heel.y, heel.z));
+    mesh.applyMatrix4(local);
+    // кость стопы может быть с масштабом сжатия: компенсируем
+    const sc = f.foot.getWorldScale(new THREE.Vector3());
+    mesh.position.divide(sc); mesh.scale.divide(sc);
+    f.foot.add(mesh);
+  }
+  let w = 1;
+  return (dt, stand) => {
+    w += ((stand ? 1 : 0) - w) * (1 - Math.exp(-4 * dt));
+    for (const f of out.feet) { f.foot.quaternion.multiply(f.qf); f.toe.quaternion.multiply(f.qt); }
+    bones.Hips.position.y += out.H * w;
+  };
+}
+
 function makeFloor(U, opts) {
   const g = new THREE.Group();
   // пол растворяется к краям в цвет фона: без линии горизонта
@@ -347,15 +517,18 @@ export async function create(container, opts = {}) {
   // данные
   const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
   // свои текстуры костюма, свечения, кожи и глаз (как у glTF: без переворота, sRGB)
-  const texture = src => src ? new THREE.TextureLoader().loadAsync(src).then(t => {
-    t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy()); return t;
+  const texture = (src, data) => src ? new THREE.TextureLoader().loadAsync(src).then(t => {
+    t.flipY = false; t.colorSpace = data ? THREE.NoColorSpace : THREE.SRGBColorSpace; t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy()); return t;
   }) : null;
-  const [gltf, meta, bin, suitMap, suitGlow, skinMap, eyeMap, hairBuf] = await Promise.all([
+  const bin_ = (data, file) => data instanceof ArrayBuffer ? data : file ? fetch(file).then(r => r.arrayBuffer()) : null;
+  const [gltf, meta, bin, suitMap, suitGlow, skinMap, eyeMap, hairBuf, suitPbr, skinPbr, skirtBuf, shoesBuf] = await Promise.all([
     opts.avatarData instanceof ArrayBuffer ? loader.parseAsync(opts.avatarData, '') : loader.loadAsync(opts.avatar || 'avatar.glb'),
     typeof opts.motionsMeta === 'object' ? opts.motionsMeta : fetch(opts.motionsMeta || 'motions.json').then(r => r.json()),
     opts.motionsData instanceof ArrayBuffer ? opts.motionsData : fetch(opts.motions || 'motions.bin').then(r => r.arrayBuffer()),
     real && texture(opts.suitMap), real && texture(opts.suitGlow), real && texture(opts.skinMap), real && texture(opts.eyeMap),
-    opts.hairData instanceof ArrayBuffer ? opts.hairData : opts.hairFile ? fetch(opts.hairFile).then(r => r.arrayBuffer()) : null
+    bin_(opts.hairData, opts.hairFile),
+    real && texture(opts.suitPbr, true), real && texture(opts.skinPbr, true), real && bin_(opts.skirtData, opts.skirtFile),
+    real && bin_(opts.shoesData, opts.shoesFile)
   ]);
   const avatar = gltf.scene;
   scene.add(avatar);
@@ -363,7 +536,7 @@ export async function create(container, opts = {}) {
   avatar.traverse(o => {
     if (o.isMesh || o.isSkinnedMesh) {
       const hair = /eyebrow|eyelash|ponytail/i.test(o.name);
-      if (real) { o.material = realMaterial(o.material, o.name, opts, U, { suit: suitMap, glow: suitGlow, skin: skinMap, eyes: eyeMap }); o.castShadow = true; }
+      if (real) { o.material = realMaterial(o.material, o.name, opts, U, { suit: suitMap, glow: suitGlow, skin: skinMap, eyes: eyeMap, suitPbr, skinPbr }); o.castShadow = true; }
       else o.material = holoMaterial(o.material, U, hair ? 1 : 0);
       if (real && opts.hideBrows && /eyebrow/i.test(o.name)) o.visible = false;   // брови уже нарисованы на коже лица
       o.frustumCulled = false;
@@ -386,6 +559,33 @@ export async function create(container, opts = {}) {
     hair.bind(new THREE.Skeleton([bones.Head, bones.Neck, bones.Spine2]));
     avatar.traverse(o => { if (o.isMesh && /ponytail/i.test(o.name)) o.visible = false; });
     if (real) hairSim = hairPhysics(hair, bones.Head);
+  }
+
+  // наряд: посадка платья, юбка, каблуки (всё — в позе покоя, до анимации)
+  if (real && opts.dressFit) avatar.traverse(o => { if (o.isSkinnedMesh && /suit/i.test(o.name)) fitDress(o, bones); });
+  let skirt = null, heels = null;
+  if (real && skirtBuf) {
+    skirt = buildSkirt(skirtBuf, opts);
+    avatar.add(skirt); avatar.updateMatrixWorld(true);
+    skirt.bind(new THREE.Skeleton([bones.Hips, bones.LeftUpLeg, bones.RightUpLeg]));
+  }
+  let heelPoints = null;
+  if (real && shoesBuf) {
+    heelPoints = {};
+    for (const s of buildShoes(shoesBuf)) {
+      avatar.add(s.mesh); avatar.updateMatrixWorld(true);
+      s.mesh.bind(new THREE.Skeleton([bones[s.side + 'Foot'], bones[s.side + 'ToeBase']]));
+      heelPoints[s.side] = s.heel;
+    }
+  }
+  if (real && opts.heels) heels = makeHeels(avatar, bones, opts, heelPoints);
+  function updateSkirt() {
+    if (!skirt) return;
+    const { uThA, uThB } = skirt.userData.thighs;
+    ['Left', 'Right'].forEach((s, i) => {
+      avatar.worldToLocal(bones[s + 'UpLeg'].getWorldPosition(uThA.value[i]));
+      avatar.worldToLocal(bones[s + 'Leg'].getWorldPosition(uThB.value[i]));
+    });
   }
 
   // пальцы: расслабленный изгиб (в записях их движения нет)
@@ -742,6 +942,7 @@ export async function create(container, opts = {}) {
     // сама начинает танцевать, если долго не трогали
     if (autoDance && !talk && (base === 'idle' || base === 'listen') && posture === 'stand' && now - lastInteract > danceAfter) setBase('dance');
     mixer.update(dt);
+    if (heels) heels(dt, posture === 'stand');
     avatar.updateMatrixWorld(true);
     const wantLook = (base === 'idle' || base === 'listen' || base === 'talk' || base === 'think') && posture === 'stand' ? 1 : posture !== 'stand' ? .4 : 0;
     lookW += (wantLook - lookW) * (1 - Math.exp(-3 * dt));
@@ -749,6 +950,7 @@ export async function create(container, opts = {}) {
     lookAtCamera(lookW);
     updateTail(dt);
     if (hairSim) hairSim(calm ? 0 : dt);
+    updateSkirt();
     // лицо
     const [vj, vr, vs, vp] = visemes(dt, now);
     const m = MOODS[mood] || {};

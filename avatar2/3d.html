@@ -25,7 +25,9 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg)}
     motions:'motions.bin',motionsData:window.__LISA3D_MOTIONS_BUF,
     motionsMeta:window.__LISA3D_META||'motions.json',
     style:'real',background:bg,floor:'#20272f',accent:'#45dcff',label:'Ассистент',
-    suitMap:window.__SUIT_MAP||'suit.webp',suitGlow:window.__SUIT_GLOW||'suit-glow.webp',skinMap:window.__SKIN_MAP||'skin.webp',eyeMap:window.__EYE_MAP||'eyes.webp',hideBrows:true,
+    satin:true,dressFit:true,heels:true,suitMap:window.__SUIT_MAP||'dress.webp',suitPbr:window.__SUIT_PBR||'dress-pbr.webp',
+    skinMap:window.__SKIN_MAP||'skin.webp',skinPbr:window.__SKIN_PBR||'skin-pbr.webp',eyeMap:window.__EYE_MAP||'eyes.webp',hideBrows:true,
+    skirtFile:'skirt.bin',skirtData:window.__SKIRT_BUF,shoesFile:'shoes.bin',shoesData:window.__SHOES_BUF,
     hairFile:'hair.bin',hairData:window.__HAIR_BUF,hairColor:'#6e4632',
     startDancing:q.get('dance')!=='0',
     danceAfter:+q.get('after')||25

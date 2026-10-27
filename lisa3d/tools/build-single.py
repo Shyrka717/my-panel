@@ -27,9 +27,12 @@ def build(folder, pages, extra=""):
 
 build(root, (("index.html", "lisa3d-hologram.html"), ("demo.html", "lisa3d-demo.html")))
 
-# вторая девушка: реалистичный вид, свой костюм, кожа с лицом с фото, глаза и волосы
+# вторая девушка: реалистичный вид, платье, кожа с лицом с фото, глаза, волосы, юбка и туфли
 a2 = repo / "avatar2"
 uri = lambda name: "'data:image/webp;base64,%s'" % b64(a2 / name)
+buf = lambda name: "d('%s').buffer" % b64(a2 / name)
 build(a2, (("3d.html", "avatar2-3d.html"), ("3d-demo.html", "avatar2-3d-demo.html")),
-      "window.__SUIT_MAP=%s;window.__SUIT_GLOW=%s;window.__SKIN_MAP=%s;window.__EYE_MAP=%s;window.__HAIR_BUF=d('%s').buffer;"
-      % (uri("suit.webp"), uri("suit-glow.webp"), uri("skin.webp"), uri("eyes.webp"), b64(a2 / "hair.bin")))
+      "window.__SUIT_MAP=%s;window.__SUIT_PBR=%s;window.__SKIN_MAP=%s;window.__SKIN_PBR=%s;window.__EYE_MAP=%s;"
+      "window.__HAIR_BUF=%s;window.__SKIRT_BUF=%s;window.__SHOES_BUF=%s;"
+      % (uri("dress.webp"), uri("dress-pbr.webp"), uri("skin.webp"), uri("skin-pbr.webp"), uri("eyes.webp"),
+         buf("hair.bin"), buf("skirt.bin"), buf("shoes.bin")))
