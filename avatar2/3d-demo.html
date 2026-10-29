@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Ассистент · демо</title>
+<style>
+:root{--bg:#1b2129;--card:#222a33;--fg:#e6edf5;--sec:#8d9aab;--accent:#45dcff;--soft:#bfeeff;--primary:#2fa7c9;color-scheme:dark}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+body{display:flex;flex-direction:column;overflow:hidden}
+#stage{position:relative;flex:1;min-height:0}
+.panel{flex:none;max-height:46vh;overflow-y:auto;background:var(--card);border-top:1px solid rgba(255,255,255,.06);padding:14px max(16px,env(safe-area-inset-right,0px)) calc(14px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.row{display:flex;gap:8px}
+.inp{flex:1;min-width:0;padding:12px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);color:var(--fg);font:inherit;font-size:16px;outline:none}
+.inp:focus{border-color:var(--primary)}
+.btn{padding:12px 14px;border-radius:12px;border:none;font:inherit;font-size:14px;font-weight:600;cursor:pointer;background:rgba(255,255,255,.06);color:var(--fg)}
+.btn.go{background:var(--primary);color:#fff}
+.btn:focus-visible,.chip:focus-visible,.inp:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.label{font-size:11px;color:var(--sec);text-transform:uppercase;letter-spacing:1.2px;font-weight:700;margin:14px 0 8px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{padding:7px 12px;border-radius:999px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;background:rgba(255,255,255,.05);color:var(--soft);border:1px solid rgba(69,220,255,.25)}
+.chip:active{transform:scale(.96)}
+.status{font-size:12px;color:var(--sec);margin-top:10px;min-height:1.3em}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div class="panel">
+  <div class="row">
+    <input id="msg" class="inp" type="text" maxlength="300" aria-label="Сообщение ассистенту" placeholder="Напиши ей: станцуй сальсу, сядь, ляг…">
+    <button id="send" class="btn go" type="button">Написать</button>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <input id="speech" class="inp" type="text" maxlength="400" aria-label="Что сказать вслух" value="Привет! Могу станцевать, сесть, лечь, прыгнуть или пройтись.">
+    <button id="say" class="btn" type="button">Сказать</button>
+  </div>
+  <div class="label">Танцы</div>
+  <div class="chips" id="dances"></div>
+  <div class="label">Действия</div>
+  <div class="chips" id="acts"></div>
+  <div class="status" id="status" aria-live="polite">Загрузка…</div>
+</div>
+<script src="../lisa3d/lisa3d.js"></script>
+<script>
+(function(){
+  const $=id=>document.getElementById(id), status=$('status');
+  const ACTS=[['stop','Стоп'],['sit','Сесть'],['lie','Лечь'],['stand','Встать'],['walk','Идти'],['run','Бежать'],['jump','Прыгнуть'],['spin','Покружиться'],['turn','Развернуться'],
+    ['wave','Помахать'],['bow','Поклон'],['stretch','Потянуться'],['laugh','Смех'],['happy','Радость'],['shrug','Пожать плечами'],['highfive','Дай пять'],['peekaboo','Ку-ку'],['jacks','Зарядка']];
+  const NAMES={dance:'танцует',idle:'стоит',listen:'слушает',think:'думает',talk:'говорит',walk:'идёт',run:'бежит',sit:'сидит',lie:'лежит'};
+  Lisa3D.create($('stage'),{
+    avatar:'../lisa3d/avatar.glb',avatarData:window.__LISA3D_AVATAR_BUF,
+    motions:'motions.bin',motionsData:window.__LISA3D_MOTIONS_BUF,
+    motionsMeta:window.__LISA3D_META||'motions.json',
+    style:'real',background:'#1b2129',floor:'#20272f',accent:'#45dcff',label:'Ассистент',
+    satin:true,dressFit:true,heels:true,suitMap:window.__SUIT_MAP||'dress.webp',suitPbr:window.__SUIT_PBR||'dress-pbr.webp',
+    skinMap:window.__SKIN_MAP||'skin.webp',skinPbr:window.__SKIN_PBR||'skin-pbr.webp',eyeMap:window.__EYE_MAP||'eyes.webp',hideBrows:true,
+    skirtFile:'skirt.bin',skirtData:window.__SKIRT_BUF,shoesFile:'shoes.bin',shoesData:window.__SHOES_BUF,
+    hairFile:'hair.bin',hairData:window.__HAIR_BUF,hairColor:'#6e4632'
+  }).then(l=>{
+    window.lisa=l;
+    const show=()=>{status.textContent='Сейчас: '+(NAMES[l.state]||l.state)+(l.speaking?', говорит':'')};
+    ['state','action','speakstart','speakend'].forEach(n=>l.on(n,()=>setTimeout(show,0)));show();
+    l.styles.forEach(s=>{const b=document.createElement('button');b.className='chip';b.type='button';b.textContent=s.title;b.onclick=()=>l.dance(s.id);$('dances').append(b)});
+    if(l.styles.length>1){const any=document.createElement('button');any.className='chip';any.type='button';any.textContent='Любой танец';any.onclick=()=>l.dance();$('dances').prepend(any)}
+    ACTS.forEach(([a,t])=>{const b=document.createElement('button');b.className='chip';b.type='button';b.textContent=t;b.onclick=()=>l.do(a);$('acts').append(b)});
+  }).catch(e=>{status.textContent='Не запустилось: '+(e&&e.message)});
+  const send=()=>{const t=$('msg').value.trim();if(!t||!window.lisa)return;const c=lisa.message(t);status.textContent=c?'Команда: '+c.action+(c.style?' / '+c.style:''):'Сообщение получено: перестала танцевать и слушает';$('msg').value=''};
+  $('send').onclick=send;$('msg').addEventListener('keydown',e=>{if(e.key==='Enter')send()});
+  // начала печатать: перестаёт танцевать
+  $('msg').addEventListener('input',()=>window.lisa&&lisa.attention());
+  $('say').onclick=()=>window.lisa&&lisa.say($('speech').value.trim()||'Привет!');
+})();
+</script>
+</body>
+</html>
